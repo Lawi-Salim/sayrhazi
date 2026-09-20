@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sayrhazi.local/schema/sayrhazi.schema.json",
+  "title": "Sayrhazi project configuration",
+  "type": "object",
+  "required": ["workflow", "project", "agents", "technical", "commands", "quality"],
+  "properties": {
+    "workflow": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"const": "Sayrhazi"},
+        "version": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "project": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "not": {"const": "A_COMPLETER"}},
+        "description": {"type": "string"},
+        "type": {"enum": ["application", "website", "api", "library", "other"]}
+      },
+      "additionalProperties": false
+    },
+    "agents": {
+      "type": "object",
+      "required": ["architect", "builder", "reviewer", "security", "qa"],
+      "properties": {
+        "architect": {"type": "string", "minLength": 1},
+        "builder": {"type": "string", "minLength": 1},
+        "reviewer": {"type": "string", "minLength": 1},
+        "security": {"type": "string", "minLength": 1},
+        "qa": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "technical": {"type": "object"},
+    "commands": {"type": "object"},
+    "runtime": {"type": "object"},
+    "quality": {"type": "object"},
+    "integration": {"type": "object"}
+  },
+  "additionalProperties": false
+}
