@@ -48,7 +48,7 @@ Tous les agents respectent les règles communes (`AGENTS.md` du projet) : lire `
 | **Bamse** | `agent/bamse.md` | Développeur principal — implémente à partir de `plan.txt`, vérifie, écrit `build.txt`. Seul à modifier le code. | `muse-spark-1.3` |
 | **Hadji** | `agent/hadji.md` | Reviewer qualité — bugs, régressions, architecture, performance. **Ne couvre pas la sécurité.** | `muse-spark-1.3` |
 | **Hifadhui** | `agent/hifadhui.md` | Spécialiste sécurité — injections, auth/sessions, secrets, dépendances, contrôle d'accès. | `muse-spark-1.3` |
-| **Zawadi** | `agent/zawadi.md` | Testeuse QA visuelle et fonctionnelle — rendu réel, responsive, modes clair/sombre, parcours. Ne déduit jamais un rendu du seul code. | `mimo-v2.5` (vision) |
+| **Zawadi** | `agent/zawadi.md` | Testeuse QA visuelle et fonctionnelle — rendu réel, responsive, modes clair/sombre, parcours. Ne déduit jamais un rendu du seul code. | `muse-spark-1.3` (vision) |
 
 Tous en `mode: primary` — on parle à un seul agent à la fois. Le flux de base est `Lawibrahim → Bamse → Hadji`, avec Hifadhui sur les zones à risque et Zawadi sur le rendu observable. Les noms d'affichage sont modifiables par projet via `agents:` dans `sayrhazi.yaml` (fichiers et rôles stables).
 
