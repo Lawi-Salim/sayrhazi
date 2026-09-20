@@ -1,0 +1,31 @@
+# Systèmes et éditeurs
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Environnements et caches
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+node_modules/
+
+# Fichiers temporaires et journaux locaux
+*.log
+*.tmp
+*.bak
+
+# Rapports générés par une instance de projet
+.opencode/resume/
+.opencode/history/
+.opencode/features/
+
+# Artefacts de test
+coverage/
+dist/
+build/
