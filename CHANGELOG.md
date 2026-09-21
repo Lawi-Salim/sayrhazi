@@ -1,5 +1,10 @@
 # Changelog Sayrhazi
 
+## 0.2.1 — 2026-09-20
+
+- Nouvelle commande `update sayrhazi` (fonction de profil) : réinstalle agents + watcher, affiche `version projet -> noyau`, signale les `agent/*.md` orphelins, relance le check. Config, rapports et historique préservés. Documentée dans `docs/installation.md`.
+- `tunda sayrhazi` compare la version installée (`workflow.version`) au noyau : `[OK] version a jour` ou simple invitation `[WARN] ... lance 'update sayrhazi'`, jamais bloquant.
+
 ## 0.2.0 — 2026-09-19
 
 - Système de nomination des agents : noms d'affichage configurables par projet via `agents:` (`architect`, `builder`, `reviewer`, `security`, `qa`) avec défauts publics ; fichiers `agent/*.md` et rôles stables, références croisées par rôle. `agents` désormais requis (schéma, modèle, validateurs).

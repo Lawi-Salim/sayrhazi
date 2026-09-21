@@ -52,6 +52,16 @@ tunda sayrhazi
 
 Ouvrir ensuite OpenCode depuis la racine du projet utilisateur, pas depuis le dépôt Sayrhazi.
 
+## Mise à jour (`update sayrhazi`)
+
+Quand le noyau évolue, mettre à jour depuis un projet déjà intégré :
+
+```powershell
+update sayrhazi
+```
+
+Cela réinstalle agents + `watch-work.py` (mis à jour avec `-Force`), affiche `version projet -> noyau`, signale les fichiers `agent/*.md` inconnus du noyau (suppression manuelle), puis relance le check. Configuration, rapports, historiques, décisions et `AGENTS.md` ne sont jamais écrasés.
+
 ## Mise à jour prudente
 
 Ne jamais déplacer l'historique d'un projet sans sauvegarde. Pour une migration, conserver les rapports et décisions, comparer les agents existants avec la version Sayrhazi, puis intégrer les changements par commit identifiable.

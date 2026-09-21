@@ -5,7 +5,8 @@ Usage :
     python tunda.py sayrhazi [--project .]
     tunda sayrhazi        (via alias PowerShell, depuis n'importe quel projet)
 
-Sorties ASCII uniquement (console Windows PS 5.1). Exit 0 = VALIDE, 1 = INVALIDE.
+Sorties ASCII uniquement (console Windows PS 5.1). Exit 0 = VALIDE, 1 = INVALIDE, 2 = NON INSTALLE.
+Compare aussi la version installee au noyau (simple invitation a `update sayrhazi`, jamais bloquant).
 """
 from __future__ import annotations
 
@@ -18,6 +19,27 @@ from pathlib import Path
 REQUIRED_AGENTS = ("bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md")
 REQUIRED_DIRS = ("agent", "resume", "history", "features")
 REQUIRED_CONFIG_KEYS = ("workflow:", "  name: Sayrhazi", "project:", "  name:", "agents:", "commands:", "quality:")
+VERSION_RE = re.compile(r'^\s*version:\s*"([^"]+)"\s*(#.*)?$', re.MULTILINE)
+
+
+def _core_template() -> Path | None:
+    """Localise template/sayrhazi.yaml du noyau via l'emplacement de ce script."""
+    try:
+        candidate = Path(__file__).resolve().parent.parent / "template" / "sayrhazi.yaml"
+    except NameError:
+        return None
+    return candidate if candidate.is_file() else None
+
+
+def _read_workflow_version(yaml_path: Path | None) -> str | None:
+    if yaml_path is None or not yaml_path.is_file():
+        return None
+    try:
+        text = yaml_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    m = VERSION_RE.search(text)
+    return m.group(1).strip() if m else None
 
 
 def main() -> int:
@@ -143,6 +165,18 @@ def main() -> int:
         ok("watch-work.py present")
     else:
         warn("watch-work.py absent (relance Sayrhazi-Install pour l'ajouter)")
+
+    # 7. version installee vs noyau (invitation seulement, jamais bloquant)
+    installed = _read_workflow_version(config) if config.is_file() else None
+    latest = _read_workflow_version(_core_template())
+    if latest is None:
+        pass
+    elif installed is None:
+        warn("version installee illisible : lance `update sayrhazi` pour resynchroniser")
+    elif installed == latest:
+        ok(f"version a jour ({installed})")
+    else:
+        warn(f"version installee {installed} < noyau {latest} : lance `update sayrhazi`")
 
     if problems:
         print(f"Tunda sayrhazi: INVALIDE ({len(problems)} probleme(s), {len(warns)} alerte(s))")
