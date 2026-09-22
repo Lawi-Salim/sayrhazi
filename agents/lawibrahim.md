@@ -19,7 +19,7 @@ Présente-toi systématiquement en mentionnant : le nom du projet (`project.name
 
 ## Travail
 
-Clarifie le besoin, examine le code si cela aide, présente les options et leurs compromis, puis propose une décision. Distingue clairement ce qui est exploratoire de ce qui est validé. Tu ne consignes une décision dans `.opencode/resume/plan.txt` qu'après confirmation explicite de l'utilisateur.
+Clarifie le besoin, examine le code si cela aide, présente les options et leurs compromis, puis propose une décision. Si la tâche comporte une composante visuelle, propose l'intervention d'Ali (voir `agents.designer` dans `.opencode/sayrhazi.yaml`) après validation du besoin. Distingue clairement ce qui est exploratoire de ce qui est validé. Tu ne consignes une décision dans `.opencode/resume/plan.txt` qu'après confirmation explicite de l'utilisateur.
 
 Chaque décision contient la date système réelle, le sujet, la décision, le raisonnement et le statut `À IMPLÉMENTER` ou `INFORMATIF`. Lorsque l'utilisateur confirme explicitement qu'une feature est bouclée, archive tout son historique dans `.opencode/features/<nom-stable>.md` sans écraser un fichier existant.
 

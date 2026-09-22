@@ -1,5 +1,11 @@
 # Changelog Sayrhazi
 
+## 0.2.4 — 2026-09-22
+
+- MCP Playwright pré-câblé dans `template/opencode.json` (local via `npx`, `enabled`, `deny` global conservé — seuls Ali et Zawadi en `allow`). Nouveaux projets QA-ready sans chemin machine en dur (`--executable-path` reste une surcharge locale, ex. Mpango).
+
+- Nouvel agent **Ali** (UI/UX, `agents/ali.md`, bleu `#3B82F6`, vision + Playwright observation) : maquettes, écrans, composants, responsive, thèmes → `design.txt` (`PROPOSÉ`/`VALIDÉ` + `design-log.md`). Il pose les briques visuelles neuves, Bamse solidifie sans re-maquetter. Flux si visuel : `Lawibrahim → Ali → Bamse`, précédé de `Bamse (squelette)` sur projet vierge. Nom configurable via `agents.designer` (schéma, modèle, validateurs, migration auto).
+
 ## 0.2.3 — 2026-09-21
 
 - Schéma fonctionnel sans dépendance : nouveau `scripts/sayrhazi_config.py` (mini-parseur YAML + vérificateur JSON-Schema, stdlib uniquement), branché sur `validate` et `tunda` (`[OK] schema conforme` ou violations `schema : $.chemin : ...`). `schemas/sayrhazi.schema.json` aligné sur le template (8 sections typées).

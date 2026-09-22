@@ -76,6 +76,15 @@ def migrate_config(inst_path: Path, tmpl_path: Path, history_dir: Path) -> tuple
             added.append("technical.database_type/driver/name (remplace database:)")
             changed = True
 
+    # 1b. Cle `designer:` manquante dans une section agents existante.
+    if has(r"^\s*architect\s*:") and not has(r"^\s*designer\s*:"):
+        idx = next(i for i, l in enumerate(inst_lines) if re.search(r"^\s*architect\s*:", l))
+        tmpl_designer = next((l for l in tmpl_lines if re.search(r"^\s*designer\s*:", l)), None)
+        if tmpl_designer:
+            inst_lines[idx + 1:idx + 1] = [tmpl_designer]
+            added.append("agents.designer (cle ajoutee, defaut Ali)")
+            changed = True
+
     # 2. Sections top-level du template integralement absentes -> ajout.
     inst_tops = {m.group(1) for l in inst_lines if (m := TOP_KEY_RE.match(l))}
     tmpl_tops = [m.group(1) for l in tmpl_lines if (m := TOP_KEY_RE.match(l))]

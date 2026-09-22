@@ -6,7 +6,11 @@ Lawibrahim discute avec l'utilisateur, explore les options et clarifie les compr
 
 ## Bamse — implémentation
 
-Bamse inspecte le projet, applique les décisions validées, implémente la tâche et exécute les vérifications pertinentes. Il archive l'ancien `build.txt`, puis écrit le nouvel état dans `build.txt`.
+Bamse inspecte le projet, applique les décisions validées, implémente la tâche et exécute les vérifications pertinentes. Il archive l'ancien `build.txt`, puis écrit le nouvel état dans `build.txt`. Il suit la structure visuelle de `design.txt` sans la re-maquetter.
+
+## Ali — design UI/UX
+
+Ali pose les briques visuelles à partir de `plan.txt` : maquettes, écrans, composants, responsive, thèmes. Il écrit `design.txt`. Il crée la structure visuelle neuve, ne modifie ni l'existant ni la logique.
 
 ## Hadji — qualité générale
 
@@ -25,10 +29,12 @@ Zawadi teste ce qui est observable dans un navigateur réel ou dans des captures
 Le flux de base est :
 
 ```text
-Lawibrahim → Bamse → Hadji
+Projet existant, tâche visuelle : Lawibrahim → Ali → Bamse → Hadji
+Projet vierge                   : Lawibrahim → Bamse (squelette) → Ali → Bamse → Hadji
+Tâche non visuelle              : Lawibrahim → Bamse → Hadji
 ```
 
-Hifadhui intervient lorsque la tâche comporte un risque de sécurité. Zawadi intervient lorsque le rendu ou le parcours utilisateur doivent être observés. L'ordre peut être adapté par le projet, mais les responsabilités ne doivent pas être mélangées.
+Ali n'intervient que si la tâche a une composante visuelle, et toujours après que la structure d'accueil existe (posée par Bamse sur projet vierge). Hifadhui intervient lorsque la tâche comporte un risque de sécurité. Zawadi intervient lorsque le rendu ou le parcours utilisateur doivent être observés. L'ordre peut être adapté par le projet, mais les responsabilités ne doivent pas être mélangées.
 
 ## Règle commune
 
@@ -36,7 +42,7 @@ Chaque agent lit d'abord la configuration et les règles du projet courant. Aucu
 
 ## Identité visuelle
 
-Chaque agent déclare sa couleur en frontmatter (`color`, hexadécimal `#RRGGBB` exigé par OpenCode) : Lawibrahim `#8B5CF6`, Bamse `#22C55E`, Hadji `#F59E0B`, Hifadhui `#EF4444`, Zawadi `#14B8A6`.
+Chaque agent déclare sa couleur en frontmatter (`color`, hexadécimal `#RRGGBB` exigé par OpenCode) : Lawibrahim `#8B5CF6`, Ali `#3B82F6`, Bamse `#22C55E`, Hadji `#F59E0B`, Hifadhui `#EF4444`, Zawadi `#14B8A6`.
 
 ## Présentation obligatoire
 

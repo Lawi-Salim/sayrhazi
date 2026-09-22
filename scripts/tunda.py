@@ -27,9 +27,9 @@ try:
 except ImportError:
     HAS_SCHEMA_CHECK = False
 
-REQUIRED_AGENTS = ("bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md")
+REQUIRED_AGENTS = ("ali.md", "bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md")
 REQUIRED_DIRS = ("agent", "resume", "history", "features")
-REQUIRED_CONFIG_KEYS = ("workflow:", "  name: Sayrhazi", "project:", "  name:", "agents:", "commands:", "quality:")
+REQUIRED_CONFIG_KEYS = ("workflow:", "  name: Sayrhazi", "project:", "  name:", "agents:", "  designer:", "commands:", "quality:")
 VERSION_RE = re.compile(r'^\s*version:\s*"([^"]+)"\s*(#.*)?$', re.MULTILINE)
 
 
@@ -111,7 +111,7 @@ def main() -> int:
         actual = {p.name for p in agent_dir.glob("*.md")}
         missing = [a for a in REQUIRED_AGENTS if a not in actual]
         if not missing:
-            ok("5 agents presents")
+            ok(f"{len(REQUIRED_AGENTS)} agents presents")
         else:
             for m in missing:
                 ko(f"agent absent: {m}")

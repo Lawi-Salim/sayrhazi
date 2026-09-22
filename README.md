@@ -14,7 +14,11 @@
 flowchart TD
     User["Utilisateur"] <-->|discussion itérative| Lawibrahim["Lawibrahim<br/>Discussion & architecture"]
     Lawibrahim -->|décision validée| plan[(".opencode/resume/plan.txt")]
-    plan --> Bamse["Bamse<br/>Implémente"]
+    plan --> Bamse["Bamse<br/>Squelette si vide,<br/>puis implémente"]
+    plan -->|si visuel, structure prête| Ali["Ali<br/>Maquette UI/UX"]
+    Bamse -->|squelette posé, si visuel| Ali
+    Ali --> design[(".opencode/resume/design.txt")]
+    design --> Bamse
     Bamse --> build[(".opencode/resume/build.txt")]
     build -.->|archive| buildlog[(".opencode/history/build-log.md")]
     build -->|auto via watch-work.py si TERMINÉ + task_id| Hadji["Hadji<br/>Qualité / archi / régressions"]
@@ -45,12 +49,13 @@ Tous les agents respectent les règles communes (`AGENTS.md` du projet) : lire `
 | Agent | Fichier | Rôle | Modèle | Couleur |
 |---|---|---|---|---|
 | **Lawibrahim** | `agent/lawibrahim.md` | Partenaire de réflexion — discute architecture et fonctionnalités avant qu'une tâche soit lancée. N'implémente et ne review jamais. | `muse-spark-1.3` | `#8B5CF6` |
-| **Bamse** | `agent/bamse.md` | Développeur principal — implémente à partir de `plan.txt`, vérifie, écrit `build.txt`. Seul à modifier le code. | `muse-spark-1.3` | `#22C55E` |
+| **Ali** | `agent/ali.md` | Designer UI/UX — maquettes, écrans, composants, responsive, thèmes. Crée la structure visuelle neuve, ne touche ni à l'existant ni à la logique. | `muse-spark-1.3` (vision) | `#3B82F6` |
+| **Bamse** | `agent/bamse.md` | Développeur principal — implémente à partir de `plan.txt` et `design.txt`, vérifie, écrit `build.txt`. Seul à modifier le code existant et la logique. | `muse-spark-1.3` | `#22C55E` |
 | **Hadji** | `agent/hadji.md` | Reviewer qualité — bugs, régressions, architecture, performance. **Ne couvre pas la sécurité.** | `muse-spark-1.3` | `#F59E0B` |
 | **Hifadhui** | `agent/hifadhui.md` | Spécialiste sécurité — injections, auth/sessions, secrets, dépendances, contrôle d'accès. | `muse-spark-1.3` | `#EF4444` |
 | **Zawadi** | `agent/zawadi.md` | Testeuse QA visuelle et fonctionnelle — rendu réel, responsive, modes clair/sombre, parcours. Ne déduit jamais un rendu du seul code. | `muse-spark-1.3` (vision) | `#14B8A6` |
 
-Tous en `mode: primary` — on parle à un seul agent à la fois. Le flux de base est `Lawibrahim → Bamse → Hadji`, avec Hifadhui sur les zones à risque et Zawadi sur le rendu observable. Les noms d'affichage sont modifiables par projet via `agents:` dans `sayrhazi.yaml` (fichiers et rôles stables).
+Tous en `mode: primary` — on parle à un seul agent à la fois. Flux : `Lawibrahim → Ali → Bamse → Hadji` si visuel sur projet existant, `Lawibrahim → Bamse (squelette) → Ali → Bamse → Hadji` sur projet vierge, `Lawibrahim → Bamse → Hadji` sinon — avec Hifadhui sur les zones à risque et Zawadi sur le rendu observable. Les noms d'affichage sont modifiables par projet via `agents:` dans `sayrhazi.yaml` (fichiers et rôles stables).
 
 ## Les fichiers de suivi
 
@@ -60,7 +65,8 @@ Chaque fichier est **remplacé** à chaque passage — il ne contient que le der
 
 | Fichier | Écrit par | Lu par |
 |---|---|---|
-| `plan.txt` | Lawibrahim | Bamse |
+| `plan.txt` | Lawibrahim | Bamse, Ali |
+| `design.txt` | Ali | Bamse |
 | `build.txt` | Bamse | Hadji, Hifadhui, Zawadi |
 | `review.txt` | Hadji | Bamse (si corrections), Zawadi |
 | `security.txt` | Hifadhui | Bamse (si corrections) |
@@ -70,17 +76,18 @@ Chaque rapport contient : date système réelle, projet, tâche (`task_id:` stab
 
 ### Historique (`.opencode/history/`)
 
-Avant de remplacer son fichier `resume/`, chaque agent archive l'ancien contenu ici : `build-log.md`, `review-log.md`, `security-log.md`, `qa-log.md`. `plan.txt` reste cumulatif jusqu'à l'archivage explicite d'une feature dans `.opencode/features/<nom>.md`.
+Avant de remplacer son fichier `resume/`, chaque agent archive l'ancien contenu ici : `build-log.md`, `design-log.md`, `review-log.md`, `security-log.md`, `qa-log.md`. `plan.txt` reste cumulatif jusqu'à l'archivage explicite d'une feature dans `.opencode/features/<nom>.md`.
 
 ## Comment ça se déroule concrètement
 
 1. **Discussion** — avec Lawibrahim. Une fois d'accord, il note la décision dans `plan.txt` (`À IMPLÉMENTER` ou `INFORMATIF`), uniquement après confirmation explicite.
-2. **Implémentation** — Bamse consulte `plan.txt`, code, vérifie, écrit `build.txt` (`EN COURS`, `TERMINÉ` ou `BLOQUÉ`).
-3. **Review qualité** — Hadji lit `build.txt`, inspecte le code, écrit `review.txt` (`VALIDÉ`, `VALIDÉ AVEC RÉSERVES` ou `CORRECTIONS NÉCESSAIRES`). Déclenchable auto via `watch-work.py` quand `build.txt` est `TERMINÉ` avec `task_id`.
-4. **Audit sécurité** (si pertinent) — Hifadhui audite et écrit `security.txt`.
-5. **QA** (une fois les reviews OK) — Zawadi teste en navigateur réel (Playwright si configuré, sinon captures) et écrit `qa.txt` (`VALIDÉ`, `VALIDÉ AVEC RÉSERVES`, `CORRECTIONS NÉCESSAIRES` ou `À COMPLÉTER`).
-6. **Corrections** — si un verdict l'exige, Bamse reprend. Le cycle repart de l'étape 2.
-7. **Terminé** — Lawibrahim archive la feature bouclée dans `.opencode/features/`.
+2. **Design** (si composante visuelle) — Ali maquette à partir de `plan.txt` et écrit `design.txt` (`PROPOSÉ` ou `VALIDÉ`).
+3. **Implémentation** — Bamse consulte `plan.txt` (et `design.txt` si visuel), code, vérifie, écrit `build.txt` (`EN COURS`, `TERMINÉ` ou `BLOQUÉ`).
+4. **Review qualité** — Hadji lit `build.txt`, inspecte le code, écrit `review.txt` (`VALIDÉ`, `VALIDÉ AVEC RÉSERVES` ou `CORRECTIONS NÉCESSAIRES`). Déclenchable auto via `watch-work.py` quand `build.txt` est `TERMINÉ` avec `task_id`.
+5. **Audit sécurité** (si pertinent) — Hifadhui audite et écrit `security.txt`.
+6. **QA** (une fois les reviews OK) — Zawadi teste en navigateur réel (Playwright si configuré, sinon captures) et écrit `qa.txt` (`VALIDÉ`, `VALIDÉ AVEC RÉSERVES`, `CORRECTIONS NÉCESSAIRES` ou `À COMPLÉTER`).
+7. **Corrections** — si un verdict l'exige, Bamse reprend. Le cycle repart de l'étape 3.
+8. **Terminé** — Lawibrahim archive la feature bouclée dans `.opencode/features/`.
 
 ## Docker est-il nécessaire ?
 
