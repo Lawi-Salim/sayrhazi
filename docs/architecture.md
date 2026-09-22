@@ -22,7 +22,7 @@ Sayrhazi/
 Projet/
 ├── AGENTS.md
 └── .opencode/
-    ├── agent/          5 agents installés
+    ├── agent/          6 agents installés
     ├── sayrhazi.yaml   configuration locale
     ├── opencode.json   permissions locales
     ├── watch-work.py   orchestrateur build.txt → Hadji
@@ -33,7 +33,7 @@ Projet/
 
 ## Rôles
 
-Lawibrahim clarifie le besoin et consigne les décisions validées. Bamse implémente et vérifie le code. Hadji contrôle la qualité générale, sans remplacer l'audit sécurité. Hifadhui examine les risques de sécurité. Zawadi vérifie le comportement réel et l'expérience visuelle lorsqu'un navigateur ou des captures sont disponibles.
+Lawibrahim clarifie le besoin et consigne les décisions validées. Ali maquette l'UI quand la tâche est visuelle. Bamse implémente et vérifie le code. Hadji contrôle la qualité générale, sans remplacer l'audit sécurité. Hifadhui examine les risques de sécurité. Zawadi vérifie le comportement réel et l'expérience visuelle lorsqu'un navigateur ou des captures sont disponibles.
 
 Les rôles sont séparés pour éviter l'auto-validation. Les agents de review, sécurité et QA analysent et rapportent ; ils ne modifient pas le code source.
 

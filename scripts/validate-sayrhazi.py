@@ -18,7 +18,7 @@ try:
 except ImportError:
     HAS_SCHEMA_CHECK = False
 
-REQUIRED_AGENTS = {"bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md"}
+REQUIRED_AGENTS = {"ali.md", "bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md"}
 REQUIRED_DIRS = ("agent", "resume", "history", "features")
 REQUIRED_CONFIG_KEYS = (
     "workflow:",
@@ -27,6 +27,7 @@ REQUIRED_CONFIG_KEYS = (
     "  name:",
     "agents:",
     "  architect:",
+    "  designer:",
     "  builder:",
     "  reviewer:",
     "  security:",
@@ -112,7 +113,7 @@ def main() -> int:
         return 1
 
     print(f"Sayrhazi installe et configure avec succes : {root}")
-    print("Les cinq agents et les dossiers de suivi sont presents.")
+    print("Les six agents et les dossiers de suivi sont presents.")
     return 0
 
 
