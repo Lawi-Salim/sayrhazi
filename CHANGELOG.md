@@ -1,5 +1,9 @@
 # Changelog Sayrhazi
 
+## 0.2.3 — 2026-09-21
+
+- Schéma fonctionnel sans dépendance : nouveau `scripts/sayrhazi_config.py` (mini-parseur YAML + vérificateur JSON-Schema, stdlib uniquement), branché sur `validate` et `tunda` (`[OK] schema conforme` ou violations `schema : $.chemin : ...`). `schemas/sayrhazi.schema.json` aligné sur le template (8 sections typées).
+
 ## 0.2.2 — 2026-09-20
 
 - Scaffolding initial : Lawibrahim propose une structure type dans un projet vide (défaut `frontend/` + `backend/` pour une `application` TypeScript, variantes selon `project.type`, préférences demandées) ; Bamse ne scaffold qu'après validation dans `plan.txt`.
