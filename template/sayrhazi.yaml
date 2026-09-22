@@ -2,7 +2,7 @@
 # Ce fichier décrit le projet courant ; il ne lance aucun service.
 workflow:
   name: Sayrhazi # Ne pas modifier
-  version: "0.2.1" # Ne pas modifier
+  version: "0.2.2" # Ne pas modifier
 
 project:
   name: A_COMPLETER # Renseigner le nom du projet
@@ -21,7 +21,9 @@ agents:
 technical:
   language: A_COMPLETER
   framework: A_COMPLETER
-  database: none # Le nom de la base de données
+  database_type: none # postgresql | mongodb | sqlite | mysql | none (moteur, pas le nom)
+  database_driver: none # sequelize | prisma | typeorm | pg | mongoose | knex | drizzle | none (librairie d'acces)
+  database_name: null # Nom de la base (null si database_type: none)
   package_manager: yarn # npm
 
 commands:

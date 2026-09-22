@@ -58,9 +58,12 @@ Quand le noyau évolue, mettre à jour depuis un projet déjà intégré :
 
 ```powershell
 update sayrhazi
+# ou multi-plateforme : python scripts/update-sayrhazi.py --project <projet>
 ```
 
 Cela réinstalle agents + `watch-work.py` (mis à jour avec `-Force`), affiche `version projet -> noyau`, signale les fichiers `agent/*.md` inconnus du noyau (suppression manuelle), puis relance le check. Configuration, rapports, historiques, décisions et `AGENTS.md` ne sont jamais écrasés.
+
+Migration douce de la config : les clés manquantes du template sont ajoutées à `sayrhazi.yaml` (ex. nouvelle section `agents:`, `database:` legacy migrée vers `database_type/driver/name` avec reprise de l'ancien nom), backup horodaté dans `history/`, valeurs existantes et `version:` alignée sur le noyau. Vérifier les valeurs migrées après coup.
 
 ## Mise à jour prudente
 
