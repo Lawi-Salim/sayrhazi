@@ -17,7 +17,7 @@ Ce projet utilise le workflow Sayrhazi. Les agents lisent `.opencode/sayrhazi.ya
 - **Zawadi** : QA réelle (navigateur ou captures), écrit `qa.txt`. Ne déduit jamais un rendu du seul code.
 - Chaque agent se présente avec le nom du projet lu dans `sayrhazi.yaml`.
 - Les noms d'affichage des agents se configurent dans `.opencode/sayrhazi.yaml` (`agents.*`, défauts : Lawibrahim, Bamse, Hadji, Hifadhui, Zawadi). Les fichiers `agent/*.md` et les rôles restent stables.
-- Réponses et rapports toujours en français, sauf demande contraire de l'utilisateur. Aucun emoji dans les réponses ni les rapports professionnels.
+- Réponses et rapports toujours en français, sauf demande contraire de l'utilisateur. Emojis proscrits dans le travail, tolérés uniquement en échange léger ou blague.
 
 ## 3. Rapports
 

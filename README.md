@@ -38,17 +38,17 @@ flowchart TD
     Fin -->|Lawibrahim archive| features[".opencode/features/<nom>.md"]
 ```
 
-Tous les agents respectent les règles communes (`AGENTS.md` du projet) : lire `.opencode/sayrhazi.yaml` comme seule source de vérité, ne jamais supposer le nom du projet, se présenter avec nom + type + stack, répondre en français sans emoji.
+Tous les agents respectent les règles communes (`AGENTS.md` du projet) : lire `.opencode/sayrhazi.yaml` comme seule source de vérité, ne jamais supposer le nom du projet, se présenter avec nom + type + stack, répondre en français, emojis proscrits dans le travail.
 
 ## Les agents
 
-| Agent | Fichier | Rôle | Modèle |
-|---|---|---|---|
-| **Lawibrahim** | `agent/lawibrahim.md` | Partenaire de réflexion — discute architecture et fonctionnalités avant qu'une tâche soit lancée. N'implémente et ne review jamais. | `muse-spark-1.3` |
-| **Bamse** | `agent/bamse.md` | Développeur principal — implémente à partir de `plan.txt`, vérifie, écrit `build.txt`. Seul à modifier le code. | `muse-spark-1.3` |
-| **Hadji** | `agent/hadji.md` | Reviewer qualité — bugs, régressions, architecture, performance. **Ne couvre pas la sécurité.** | `muse-spark-1.3` |
-| **Hifadhui** | `agent/hifadhui.md` | Spécialiste sécurité — injections, auth/sessions, secrets, dépendances, contrôle d'accès. | `muse-spark-1.3` |
-| **Zawadi** | `agent/zawadi.md` | Testeuse QA visuelle et fonctionnelle — rendu réel, responsive, modes clair/sombre, parcours. Ne déduit jamais un rendu du seul code. | `muse-spark-1.3` (vision) |
+| Agent | Fichier | Rôle | Modèle | Couleur |
+|---|---|---|---|---|
+| **Lawibrahim** | `agent/lawibrahim.md` | Partenaire de réflexion — discute architecture et fonctionnalités avant qu'une tâche soit lancée. N'implémente et ne review jamais. | `muse-spark-1.3` | `#8B5CF6` |
+| **Bamse** | `agent/bamse.md` | Développeur principal — implémente à partir de `plan.txt`, vérifie, écrit `build.txt`. Seul à modifier le code. | `muse-spark-1.3` | `#22C55E` |
+| **Hadji** | `agent/hadji.md` | Reviewer qualité — bugs, régressions, architecture, performance. **Ne couvre pas la sécurité.** | `muse-spark-1.3` | `#F59E0B` |
+| **Hifadhui** | `agent/hifadhui.md` | Spécialiste sécurité — injections, auth/sessions, secrets, dépendances, contrôle d'accès. | `muse-spark-1.3` | `#EF4444` |
+| **Zawadi** | `agent/zawadi.md` | Testeuse QA visuelle et fonctionnelle — rendu réel, responsive, modes clair/sombre, parcours. Ne déduit jamais un rendu du seul code. | `muse-spark-1.3` (vision) | `#14B8A6` |
 
 Tous en `mode: primary` — on parle à un seul agent à la fois. Le flux de base est `Lawibrahim → Bamse → Hadji`, avec Hifadhui sur les zones à risque et Zawadi sur le rendu observable. Les noms d'affichage sont modifiables par projet via `agents:` dans `sayrhazi.yaml` (fichiers et rôles stables).
 

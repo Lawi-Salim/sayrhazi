@@ -1,5 +1,14 @@
 # Changelog Sayrhazi
 
+## 0.2.2 — 2026-09-20
+
+- Scaffolding initial : Lawibrahim propose une structure type dans un projet vide (défaut `frontend/` + `backend/` pour une `application` TypeScript, variantes selon `project.type`, préférences demandées) ; Bamse ne scaffold qu'après validation dans `plan.txt`.
+- Identité visuelle : couleur hexadécimale en frontmatter (`Lawibrahim #8B5CF6`, `Bamse #22C55E`, `Hadji #F59E0B`, `Hifadhui #EF4444`, `Zawadi #14B8A6`, format exigé par OpenCode), reprise dans `docs/agents.md` et le `README`.
+- Config BDD clarifiée : `technical.database` scindé en `database_type` (moteur), `database_driver` (librairie d'accès) et `database_name` (nom ou `null`). Ton exemple : `postgresql` + `sequelize` + `matinma`.
+- Règle français/emojis désormais explicite dans chaque fichier agent : français toujours, emojis proscrits dans le travail mais tolérés en blague (Bamse en affichait un en présentation malgré la règle commune).
+- Nouveau `scripts/update-sayrhazi.py` : la mise à jour devient un script versionné et multi-plateforme (agents + watcher, config préservée, orphelins signalés, exit 2 si non installé). La fonction `update sayrhazi` délègue dessus.
+- Migration douce : `update` ajoute les clés manquantes du template (`agents:`, `database:` → `database_type/driver/name` avec reprise de l'ancien nom), backup horodaté dans `history/`, valeurs existantes jamais écrasées.
+
 ## 0.2.1 — 2026-09-20
 
 - Nouvelle commande `update sayrhazi` (fonction de profil) : réinstalle agents + watcher, affiche `version projet -> noyau`, signale les `agent/*.md` orphelins, relance le check. Config, rapports et historique préservés. Documentée dans `docs/installation.md`.
