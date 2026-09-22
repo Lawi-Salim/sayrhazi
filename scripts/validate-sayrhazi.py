@@ -7,6 +7,17 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from sayrhazi_config import (
+        load_schema,
+        parse_simple_yaml,
+        validate_against_schema,
+    )
+    HAS_SCHEMA_CHECK = True
+except ImportError:
+    HAS_SCHEMA_CHECK = False
+
 REQUIRED_AGENTS = {"bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md"}
 REQUIRED_DIRS = ("agent", "resume", "history", "features")
 REQUIRED_CONFIG_KEYS = (
@@ -58,6 +69,19 @@ def main() -> int:
                 fail(f"  sayrhazi.yaml:{lineno}: {line}", config_notes)
         if re.search(r"^\s*name:\s*$", text, re.MULTILINE):
             fail("project.name est vide", config_notes)
+        if HAS_SCHEMA_CHECK:
+            schema, schema_err = load_schema(Path(__file__).resolve().parent.parent)
+            if schema_err:
+                fail(schema_err, install_errors)
+            else:
+                data, parse_err = parse_simple_yaml(text)
+                if parse_err:
+                    fail(f"sayrhazi.yaml illisible : {parse_err}", install_errors)
+                else:
+                    for violation in validate_against_schema(data, schema):
+                        if "cle requise manquante" in violation:
+                            continue  # deja couvert par les cles requises ci-dessus
+                        fail(f"schema : {violation}", install_errors)
 
     agent_dir = opencode / "agent"
     if not agent_dir.is_dir():

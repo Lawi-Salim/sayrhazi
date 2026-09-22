@@ -16,6 +16,17 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from sayrhazi_config import (
+        load_schema,
+        parse_simple_yaml,
+        validate_against_schema,
+    )
+    HAS_SCHEMA_CHECK = True
+except ImportError:
+    HAS_SCHEMA_CHECK = False
+
 REQUIRED_AGENTS = ("bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md")
 REQUIRED_DIRS = ("agent", "resume", "history", "features")
 REQUIRED_CONFIG_KEYS = ("workflow:", "  name: Sayrhazi", "project:", "  name:", "agents:", "commands:", "quality:")
@@ -148,6 +159,21 @@ def main() -> int:
                     print(f"  sayrhazi.yaml:{lineno}: {line}")
             if re.search(r"^\s*name:\s*$", text, re.MULTILINE):
                 ko("project.name est vide")
+            if HAS_SCHEMA_CHECK:
+                schema, schema_err = load_schema(Path(__file__).resolve().parent.parent)
+                if schema_err:
+                    ko(schema_err)
+                else:
+                    data, parse_err = parse_simple_yaml(text)
+                    if parse_err:
+                        ko(f"sayrhazi.yaml illisible : {parse_err}")
+                    else:
+                        violations = [v for v in validate_against_schema(data, schema) if "cle requise manquante" not in v]
+                        if violations:
+                            for v in violations:
+                                ko(f"schema : {v}")
+                        else:
+                            ok("schema conforme")
 
     # 5. opencode.json
     oj = opencode / "opencode.json"
