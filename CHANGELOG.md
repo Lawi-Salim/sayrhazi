@@ -2,6 +2,9 @@
 
 ## 0.2.4 — 2026-09-22
 
+- Fix validation : `technical:` ajouté aux clés explicites de `validate` et `tunda` (une config sans section `technical` passait silencieusement).
+- Doc : « 5 agents » → 6, et distinction explicite workflow prescrit vs transitions automatiques (`automation.md`, `README`).
+
 - MCP Playwright pré-câblé dans `template/opencode.json` (local via `npx`, `enabled`, `deny` global conservé — seuls Ali et Zawadi en `allow`). Nouveaux projets QA-ready sans chemin machine en dur (`--executable-path` reste une surcharge locale, ex. Mpango).
 
 - Nouvel agent **Ali** (UI/UX, `agents/ali.md`, bleu `#3B82F6`, vision + Playwright observation) : maquettes, écrans, composants, responsive, thèmes → `design.txt` (`PROPOSÉ`/`VALIDÉ` + `design-log.md`). Il pose les briques visuelles neuves, Bamse solidifie sans re-maquetter. Flux si visuel : `Lawibrahim → Ali → Bamse`, précédé de `Bamse (squelette)` sur projet vierge. Nom configurable via `agents.designer` (schéma, modèle, validateurs, migration auto).

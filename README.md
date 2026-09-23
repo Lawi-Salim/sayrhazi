@@ -114,7 +114,7 @@ Depuis n'importe quel projet (inutile d'ouvrir le dépôt Sayrhazi) :
 & "C:\Users\Lawibrahim\Documents\Sayrhazi\scripts\Install-Sayrhazi.ps1" -ProjectPath "."
 ```
 
-Avec les fonctions de profil : `Sayrhazi .` (installe + contrôle), `tunda sayrhazi` (check détaillé : structure, 5 agents, 0 `A_COMPLETER`, JSON valide, watcher).
+Avec les fonctions de profil : `Sayrhazi .` (installe + contrôle), `tunda sayrhazi` (check détaillé : structure, 6 agents, 0 `A_COMPLETER`, JSON valide, watcher).
 
 Le script ne supprime ni ne remplace rapports, historiques, décisions ou configuration existants. Après installation, compléter `.opencode/sayrhazi.yaml`, renseigner les règles locales (`AGENTS.md` §4), puis vérifier avec `tunda sayrhazi`.
 
@@ -142,7 +142,7 @@ Le `deny` global empêche les autres agents d'y accéder ; seul `zawadi.md` a `p
 
 ## Automatisation
 
-Le cœur fonctionne manuellement ; `watch-work.py` (installé dans `.opencode/`) automatise une seule transition : `build.txt TERMINÉ` + `task_id` → Hadji → vérification de `review.txt`. Il refuse les rapports incomplets, empêche les doubles déclenchements et applique un timeout. Pas de retour auto vers Bamse, pas de boucle après review négative : les décisions restent humaines.
+Le cœur fonctionne manuellement ; `watch-work.py` (installé dans `.opencode/`) automatise une seule transition : `build.txt TERMINÉ` + `task_id` → Hadji → vérification de `review.txt`. Le reste du flux (Lawibrahim → Ali → Bamse → Hadji → Hifadhui → Zawadi) est prescrit mais orchestré par l'humain. Il refuse les rapports incomplets, empêche les doubles déclenchements et applique un timeout. Pas de retour auto vers Bamse, pas de boucle après review négative : les décisions restent humaines.
 
 Limites connues : permissions en mode headless, fichiers créés hors projet (Bamse doit travailler dans le projet), sessions longues interrompues.
 
