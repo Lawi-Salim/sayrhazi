@@ -32,6 +32,7 @@ REQUIRED_CONFIG_KEYS = (
     "  reviewer:",
     "  security:",
     "  qa:",
+    "technical:",
     "commands:",
     "quality:",
 )

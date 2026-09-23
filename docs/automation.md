@@ -6,6 +6,20 @@ Le cœur de Sayrhazi fonctionne manuellement. L'automatisation est une extension
 
 Une première automatisation raisonnable consiste à surveiller `build.txt` et à lancer Hadji lorsque Bamse a produit un rapport complet. Le script doit vérifier un statut explicite et un identifiant de tâche ; une simple modification de fichier ne suffit pas.
 
+## Workflow prescrit vs transitions automatiques
+
+Ne pas confondre les deux niveaux :
+
+```text
+WORKFLOW PRESCRIT (conceptuel, à orchestration humaine) :
+Lawibrahim → Ali → Bamse → Hadji → Hifadhui → Zawadi → Terminé
+
+TRANSITIONS AUTOMATIQUES ACTUELLES (réel, watch-work.py) :
+build.txt TERMINÉ + task_id → Hadji → vérifier review.txt
+```
+
+Seule la transition `build.txt → Hadji` est automatisée. Hifadhui, Zawadi et le retour vers Bamse restent déclenchés manuellement : le moteur n'empêche pas toutes les transitions invalides, ce sont les contrats documentaires (rapports, statuts, `task_id`) qui les cadrent.
+
 ## Watcher actuel (`scripts/watch-work.py`)
 
 Le watcher surveille `.opencode/resume/build.txt` et lance Hadji uniquement si le rapport est complet : fichier stable (anti écriture en cours), `task_id` présent et `status: TERMINÉ`. Il refuse les statuts incomplets (`EN COURS`, `BLOQUÉ`, absent), empêche les doubles déclenchements (`task_id` + hash déjà traité), applique un timeout et vérifie que `review.txt` mentionne le même `task_id`.

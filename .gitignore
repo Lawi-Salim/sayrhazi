@@ -29,3 +29,6 @@ node_modules/
 coverage/
 dist/
 build/
+
+# Brouillons locaux (idees, audits) — jamais pushes
+/idee-automation/

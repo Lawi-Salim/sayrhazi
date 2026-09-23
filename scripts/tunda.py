@@ -29,7 +29,7 @@ except ImportError:
 
 REQUIRED_AGENTS = ("ali.md", "bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md")
 REQUIRED_DIRS = ("agent", "resume", "history", "features")
-REQUIRED_CONFIG_KEYS = ("workflow:", "  name: Sayrhazi", "project:", "  name:", "agents:", "  designer:", "commands:", "quality:")
+REQUIRED_CONFIG_KEYS = ("workflow:", "  name: Sayrhazi", "project:", "  name:", "agents:", "  designer:", "technical:", "commands:", "quality:")
 VERSION_RE = re.compile(r'^\s*version:\s*"([^"]+)"\s*(#.*)?$', re.MULTILINE)
 
 
