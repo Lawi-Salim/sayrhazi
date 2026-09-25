@@ -1,0 +1,11 @@
+# Etape : QA reelle (Zawadi), si rendu observable.
+id: qa
+agent: qa
+condition: visual_qa_required
+requires:
+  - build.txt
+produces:
+  - qa.txt
+next:
+  success: done
+  failure: implementation

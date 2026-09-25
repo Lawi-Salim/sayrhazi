@@ -1,0 +1,10 @@
+# Etape : planification (Lawibrahim).
+id: planning
+agent: architect
+requires:
+  - besoin utilisateur
+produces:
+  - plan.txt
+next:
+  success: design
+  failure: planning

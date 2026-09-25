@@ -1,0 +1,6 @@
+# Workflow Sayrhazi (declaratif, runtime-agnostique).
+# Les etapes designent des roles (agents.*), jamais des noms d'affichage.
+workflow:
+  mode: supervised
+  auto_start: false
+  max_parallel_agents: 3

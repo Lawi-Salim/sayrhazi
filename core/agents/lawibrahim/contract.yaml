@@ -1,0 +1,23 @@
+id: lawibrahim
+input:
+  required:
+    - sayrhazi.yaml
+    - AGENTS.md
+  optional:
+    - features
+output:
+  report: plan.txt
+  contains:
+    - date
+    - sujet
+    - decision
+    - raisonnement
+    - statut
+  verdicts:
+    - A IMPLÉMENTER
+    - INFORMATIF
+permissions:
+  code: none
+rules:
+  - ecriture plan.txt uniquement apres confirmation explicite
+  - archivage feature bouclée vers features sans écraser

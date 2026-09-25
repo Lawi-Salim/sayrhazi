@@ -1,0 +1,11 @@
+# Schéma de rapport Sayrhazi (référence ; application stricte : lots automation).
+# Tout rapport porte task_id + agent + status + completed_at.
+report:
+  required: [task_id, agent, status, completed_at, summary]
+  fields:
+    task_id: {type: string, stable: true}
+    agent: {type: role}
+    status: {type: string}
+    completed_at: {type: datetime}
+    summary: {type: string}
+    next_agents: {type: list, items: role, optional: true}

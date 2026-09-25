@@ -1,0 +1,8 @@
+id: hifadhui
+name: Hifadhui
+role: security
+description: Spécialiste sécurité Sayrhazi
+mode: primary
+model: opencode/muse-spark-1.3-contributor-free
+color: "#EF4444"
+display_key: agents.security

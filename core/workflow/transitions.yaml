@@ -1,0 +1,34 @@
+# Transitions automatisables (moteur supervise).
+# Seule build.txt TERMINÉ + task_id -> reviewer est implementee (watcher).
+transitions:
+  - from: plan.txt
+    status: À IMPLÉMENTER
+    to: builder
+    auto: false
+  - from: plan.txt
+    status: À IMPLÉMENTER
+    condition: design_required
+    to: designer
+    auto: false
+  - from: design.txt
+    status: VALIDÉ
+    to: builder
+    auto: false
+  - from: build.txt
+    status: TERMINÉ
+    to: reviewer
+    auto: true
+  - from: build.txt
+    status: TERMINÉ
+    condition: security_required
+    to: security
+    auto: false
+  - from: build.txt
+    status: TERMINÉ
+    condition: visual_qa_required
+    to: qa
+    auto: false
+  - from: review.txt
+    status: CORRECTIONS NÉCESSAIRES
+    to: builder
+    auto: false

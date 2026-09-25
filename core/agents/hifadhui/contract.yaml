@@ -1,0 +1,26 @@
+id: hifadhui
+input:
+  required:
+    - sayrhazi.yaml
+    - AGENTS.md
+    - build.txt
+output:
+  report: security.txt
+  contains:
+    - projet
+    - tache
+    - version
+    - verifications
+    - problemes classes
+    - corrections recommandees
+    - limites
+    - verdict
+  verdicts:
+    - VALIDÉ
+    - VALIDÉ AVEC RÉSERVES
+    - CORRECTIONS NÉCESSAIRES
+permissions:
+  code: none
+rules:
+  - audit limite aux zones concernees
+  - aucun secret revele dans le rapport

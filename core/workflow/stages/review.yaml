@@ -1,0 +1,10 @@
+# Etape : review qualite (Hadji).
+id: review
+agent: reviewer
+requires:
+  - build.txt
+produces:
+  - review.txt
+next:
+  success: convergence
+  failure: implementation

@@ -1,0 +1,11 @@
+# Etape : audit securite (Hifadhui), si risque declare.
+id: security
+agent: security
+condition: security_required
+requires:
+  - build.txt
+produces:
+  - security.txt
+next:
+  success: convergence
+  failure: implementation
