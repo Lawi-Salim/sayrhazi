@@ -1,0 +1,29 @@
+id: zawadi
+input:
+  required:
+    - sayrhazi.yaml
+    - AGENTS.md
+    - build.txt
+  optional:
+    - captures
+    - navigateur reel
+output:
+  report: qa.txt
+  contains:
+    - projet
+    - tache
+    - mode de test
+    - observations
+    - problemes avec gravite
+    - limites
+    - verdict
+  verdicts:
+    - VALIDÉ
+    - VALIDÉ AVEC RÉSERVES
+    - CORRECTIONS NÉCESSAIRES
+    - À COMPLÉTER
+permissions:
+  code: none
+rules:
+  - aucun rendu affirme sans navigateur reel ou capture
+  - verdict À COMPLÉTER si observation impossible

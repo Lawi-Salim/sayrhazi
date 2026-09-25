@@ -12,12 +12,15 @@ Le dépôt Sayrhazi contient les éléments réutilisables : agents, modèles, s
 
 ```text
 Sayrhazi/
-├── agents/       rôles génériques
-├── template/     fichiers installés dans un projet
-├── schemas/      contrats de configuration (appliqués par validate et tunda)
-├── scripts/      installation, validation, mise à jour, watcher et check
-├── docs/         documentation
-└── AGENTS.md     règles de contribution au noyau
+├── core/           concepts (agents, workflow, schemas, rules, templates)
+├── runtimes/       adaptateur opencode (agents .md, templates, scripts)
+├── engine/         opérations (installer, checker, updater, renderer, resolver, state)
+├── cli/            commandes (install, check, update, remove, info)
+├── tests/          non-régression stdlib
+├── docs/           documentation
+├── AGENTS.md       règles de contribution au noyau
+├── CHANGELOG.md    versions
+└── VERSION         version courante
 
 Projet/
 ├── AGENTS.md

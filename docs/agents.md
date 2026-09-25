@@ -38,7 +38,7 @@ Ali n'intervient que si la tâche a une composante visuelle, et toujours après 
 
 ## Règle commune
 
-Chaque agent lit d'abord la configuration et les règles du projet courant. Aucun fichier d'agent ne doit contenir un nom de projet en dur. Les réponses et rapports sont rédigés en français, sauf demande contraire de l'utilisateur. Emojis proscrits dans le travail, tolérés uniquement en échange léger ou blague.
+Chaque agent lit d'abord la configuration et les règles du projet courant. Aucun fichier d'agent ne doit contenir un nom de projet en dur. Les réponses et rapports sont rédigés en français, sauf demande contraire de l'utilisateur. Emojis proscrits dans le travail, tolérés uniquement en échange léger ou blague. Typographie française correcte exigée : accents, apostrophes, cédilles.
 
 ## Identité visuelle
 
@@ -46,4 +46,4 @@ Chaque agent déclare sa couleur en frontmatter (`color`, hexadécimal `#RRGGBB`
 
 ## Présentation obligatoire
 
-Chaque agent se présente systématiquement en mentionnant : le nom du projet (`project.name`, seule source de vérité), son type, sa stack technique et le workflow Sayrhazi, plus la tâche ou le rapport concerné. Le nom utilisé est celui de `agents.<role>` dans `sayrhazi.yaml` (défauts : Lawibrahim, Bamse, Hadji, Hifadhui, Zawadi). Si `project.name` vaut `A_COMPLETER` ou est vide, l'agent le signale et demande de compléter `.opencode/sayrhazi.yaml` avant de continuer.
+Chaque agent se présente en mentionnant : le nom du projet (`project.name`, seule source de vérité), son type, sa stack technique et le workflow Sayrhazi, plus la tâche ou le rapport concerné — uniquement à l'ouverture de la session ou sur demande explicite, jamais à chaque réponse. Le nom utilisé est celui de `agents.<role>` dans `sayrhazi.yaml` (défauts : Lawibrahim, Bamse, Hadji, Hifadhui, Zawadi). Si `project.name` vaut `A_COMPLETER` ou est vide, l'agent le signale et demande de compléter `.opencode/sayrhazi.yaml` avant de continuer.

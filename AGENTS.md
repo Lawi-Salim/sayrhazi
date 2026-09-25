@@ -4,9 +4,9 @@ Ce dépôt contient le noyau générique du workflow Sayrhazi. Il ne contient pa
 
 ## Séparation des responsabilités
 
-Les fichiers `agents/`, `template/`, `schemas/`, `scripts/` et `docs/` définissent le système portable. Les rapports d'une instance réelle (`plan.txt`, `build.txt`, `review.txt`, `security.txt`, `qa.txt`) ne doivent jamais être ajoutés à ce dépôt.
+Les fichiers `core/`, `runtimes/`, `engine/`, `cli/`, `tests/` et `docs/` définissent le système portable. Les rapports d'une instance réelle (`plan.txt`, `design.txt`, `build.txt`, `review.txt`, `security.txt`, `qa.txt`) ne doivent jamais être ajoutés à ce dépôt.
 
-Les règles destinées aux projets qui installent Sayrhazi se trouvent dans `template/AGENTS.md`. Ne pas confondre ce fichier avec les règles de contribution du présent dépôt.
+Les règles destinées aux projets qui installent Sayrhazi se trouvent dans `runtimes/opencode/templates/AGENTS.md`. Ne pas confondre ce fichier avec les règles de contribution du présent dépôt.
 
 ## Modification du noyau
 
@@ -18,11 +18,13 @@ Toute modification du contrat de configuration, des statuts, des rapports ou des
 
 Avant un commit :
 
-1. exécuter `python scripts/validate-sayrhazi.py` sur une instance de test complète ;
+1. exécuter `python tests/test_core.py`, `python tests/test_integration.py` et `python tests/test_cli.py` ;
+
+1. exécuter `python engine/checker.py` sur une instance de test complète ;
 1. vérifier la syntaxe JSON avec un parseur JSON ;
 1. vérifier les scripts shell avec `bash -n` ;
 1. contrôler que les scripts d'installation ne suppriment jamais les rapports ni l'historique d'un projet ;
-1. rechercher les références spécifiques à un projet dans `agents/` et `template/`.
+1. rechercher les références spécifiques à un projet dans `core/` et `runtimes/`.
 
 ## Versionnement
 

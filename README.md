@@ -1,5 +1,22 @@
 # Sayrhazi
 
+<div align="center">
+
+```text
+╔═══════════════════════════════════════════════════╗
+║                                                   ║
+║     ____                   _                 _    ║
+║    / ___|  __ _ _   _ _ __| |__   __ _ ____ (_)   ║
+║    \___ \ / _` | | | | '__| '_ \ / _` |_  / | |   ║
+║     ___) | (_| | |_| | |  | | | | (_| |/ /__| |   ║
+║    |____/ \__,_|\__, |_|  |_| |_|\__,_/_____|_|   ║
+║                 |___/  v0.3.0 - sayrhazi          ║
+║                                                   ║
+╚═══════════════════════════════════════════════════╝
+```
+
+</div>
+
 **Sayrhazi** est un workflow multi-agents portable pour structurer le développement logiciel, orchestré via [OpenCode](https://opencode.ai). Il peut être installé dans une application, un site web, une API ou tout autre projet technique. Chaque agent a un rôle précis et cloisonné.
 
 ### Origine du nom
@@ -42,7 +59,7 @@ flowchart TD
     Fin -->|Lawibrahim archive| features[".opencode/features/<nom>.md"]
 ```
 
-Tous les agents respectent les règles communes (`AGENTS.md` du projet) : lire `.opencode/sayrhazi.yaml` comme seule source de vérité, ne jamais supposer le nom du projet, se présenter avec nom + type + stack, répondre en français, emojis proscrits dans le travail.
+Tous les agents respectent les règles communes (`AGENTS.md` du projet) : lire `.opencode/sayrhazi.yaml` comme seule source de vérité, ne jamais supposer le nom du projet, se présenter avec nom + type + stack (ouverture ou demande uniquement), répondre en français avec typographie correcte, emojis proscrits dans le travail.
 
 ## Les agents
 
@@ -100,7 +117,7 @@ Docker devient utile uniquement si le projet applicatif l'exige (PostgreSQL, Red
 Sayrhazi est séparé du code de chaque projet :
 
 ```text
-Sayrhazi/      # noyau : agents, template, schemas, scripts, docs
+Sayrhazi/      # noyau : core, runtimes/opencode, engine, cli, tests, docs
 MonProjet/     # projet : code + .opencode/ + AGENTS.md
 ```
 
@@ -111,12 +128,24 @@ Chaque projet possède sa propre copie de `.opencode/agent/` (`sayrhazi.yaml`, `
 Depuis n'importe quel projet (inutile d'ouvrir le dépôt Sayrhazi) :
 
 ```powershell
-& "C:\Users\Lawibrahim\Documents\Sayrhazi\scripts\Install-Sayrhazi.ps1" -ProjectPath "."
+& "C:\Users\Lawibrahim\Documents\Sayrhazi\runtimes\opencode\scripts\Install-Sayrhazi.ps1" -ProjectPath "."
 ```
 
 Avec les fonctions de profil : `Sayrhazi .` (installe + contrôle), `tunda sayrhazi` (check détaillé : structure, 6 agents, 0 `A_COMPLETER`, JSON valide, watcher).
 
 Le script ne supprime ni ne remplace rapports, historiques, décisions ou configuration existants. Après installation, compléter `.opencode/sayrhazi.yaml`, renseigner les règles locales (`AGENTS.md` §4), puis vérifier avec `tunda sayrhazi`.
+
+## Commandes
+
+Les crochets indiquent un argument optionnel : sans argument, la commande vise le dossier courant.
+
+| Commande | Usage | Effet |
+|---|---|---|
+| `sayrhazi [chemin]` | installe + contrôle | Agents + watcher recopiés, config créée si absente, état préservé |
+| `tunda sayrhazi` | diagnostic | Checklist : structure, 6 agents, 0 `A_COMPLETER`, schéma, version vs noyau (exit 0/1/2) |
+| `update sayrhazi` | mise à jour | Agents + watcher, migration douce + backup, version alignée, check relancé |
+| `info sayrhazi` | renseigne | Banner + versions, agents, rapports (lecture seule) |
+| `remove sayrhazi [--yes]` | retire prudemment | Simulation + confirmation ; fichiers noyau seuls, jamais config/rapports/historique |
 
 ## Zawadi et Playwright (optionnel)
 
@@ -138,7 +167,7 @@ Zawadi peut piloter un vrai navigateur via un serveur MCP Playwright :
 }
 ```
 
-Le `deny` global empêche les autres agents d'y accéder ; seul `zawadi.md` a `playwright_*: allow`. Sans navigateur ni captures, Zawadi rend le verdict `À COMPLÉTER` au lieu d'inventer un rendu.
+Le `deny` global empêche les autres agents d'y accéder ; seuls `ali.md` (observation) et `zawadi.md` (tests) ont `playwright_*: allow`. Sans navigateur ni captures, Zawadi rend le verdict `À COMPLÉTER` au lieu d'inventer un rendu.
 
 ## Automatisation
 
@@ -148,7 +177,7 @@ Limites connues : permissions en mode headless, fichiers créés hors projet (Ba
 
 ## Étendre le système
 
-Pour ajouter un agent : créer `agents/<nom>.md` (frontmatter `description`/`mode`/`model`, sans nom de projet en dur), lui donner son fichier `resume/` + journal `history/`, ne lui faire lire que le nécessaire, mettre à jour agents, docs, template et `CHANGELOG.md`.
+Pour ajouter un agent : créer `core/agents/<nom>/{agent.yaml,instructions.md,contract.yaml}` (sans nom de projet en dur), régénérer avec `python engine/renderer.py` (vérifier avec `--check`), lui donner son fichier `resume/` + journal `history/`, ne lui faire lire que le nécessaire, mettre à jour engine/cli/validateurs, docs, templates et `CHANGELOG.md`.
 
 ## Versionnement
 

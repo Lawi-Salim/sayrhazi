@@ -1,0 +1,29 @@
+id: bamse
+input:
+  required:
+    - sayrhazi.yaml
+    - AGENTS.md
+    - plan.txt
+  optional:
+    - design.txt
+    - rapports de correction
+output:
+  report: build.txt
+  contains:
+    - projet
+    - tache
+    - fichiers modifies
+    - verifications
+    - decisions
+    - problemes
+    - reste a faire
+    - statut
+  verdicts:
+    - EN COURS
+    - TERMINÉ
+    - BLOQUÉ
+permissions:
+  code: write
+rules:
+  - suit design.txt sans re-maquetter
+  - signale audit Hifadhui sur zones sensibles

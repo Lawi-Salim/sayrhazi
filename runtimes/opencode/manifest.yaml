@@ -1,0 +1,18 @@
+# Manifeste de l'adaptateur OpenCode Sayrhazi.
+runtime:
+  id: opencode
+  name: OpenCode
+version:
+  minimum: "1.x"
+capabilities:
+  agents: true
+  commands: true
+  instructions: true
+  scripts: true
+paths:
+  config: .opencode
+  agents: .opencode/agent
+  resume: .opencode/resume
+  history: .opencode/history
+  features: .opencode/features
+models_gratuits_requis: true

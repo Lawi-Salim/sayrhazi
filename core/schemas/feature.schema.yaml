@@ -1,0 +1,7 @@
+# Schéma d'archive de feature Sayrhazi (référence).
+feature:
+  required: [task_id, title, decisions]
+  fields:
+    task_id: {type: string, stable: true}
+    title: {type: string}
+    decisions: {type: list, items: decision}

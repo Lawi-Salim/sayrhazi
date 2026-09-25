@@ -1,0 +1,25 @@
+id: hadji
+input:
+  required:
+    - sayrhazi.yaml
+    - AGENTS.md
+    - build.txt
+output:
+  report: review.txt
+  contains:
+    - projet
+    - tache
+    - version examinee
+    - controles
+    - problemes classes
+    - recommandations
+    - limites
+    - verdict
+  verdicts:
+    - VALIDÉ
+    - VALIDÉ AVEC RÉSERVES
+    - CORRECTIONS NÉCESSAIRES
+permissions:
+  code: none
+rules:
+  - ne rend pas de verdict securite (autorite Hifadhui)

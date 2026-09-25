@@ -20,7 +20,7 @@ build.txt TERMINÉ + task_id → Hadji → vérifier review.txt
 
 Seule la transition `build.txt → Hadji` est automatisée. Hifadhui, Zawadi et le retour vers Bamse restent déclenchés manuellement : le moteur n'empêche pas toutes les transitions invalides, ce sont les contrats documentaires (rapports, statuts, `task_id`) qui les cadrent.
 
-## Watcher actuel (`scripts/watch-work.py`)
+## Watcher actuel (`runtimes/opencode/scripts/watch-work.py`, installé dans `.opencode/`)
 
 Le watcher surveille `.opencode/resume/build.txt` et lance Hadji uniquement si le rapport est complet : fichier stable (anti écriture en cours), `task_id` présent et `status: TERMINÉ`. Il refuse les statuts incomplets (`EN COURS`, `BLOQUÉ`, absent), empêche les doubles déclenchements (`task_id` + hash déjà traité), applique un timeout et vérifie que `review.txt` mentionne le même `task_id`.
 

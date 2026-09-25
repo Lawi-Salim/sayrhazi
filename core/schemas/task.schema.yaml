@@ -1,0 +1,10 @@
+# Schéma de tâche Sayrhazi (référence ; application stricte : lots automation).
+# Champs requis : task_id, title, status. Agents désignés par rôles stables.
+task:
+  required: [task_id, title, status]
+  fields:
+    task_id: {type: string, stable: true}
+    title: {type: string}
+    status: {enum: [À IMPLÉMENTER, INFORMATIF, EN COURS, TERMINÉ, BLOQUÉ]}
+    agents_required: {type: list, items: role}
+    acceptance_criteria: {type: list, items: string}

@@ -1,0 +1,10 @@
+# Etape : implementation (Bamse).
+id: implementation
+agent: builder
+requires:
+  - plan.txt
+produces:
+  - build.txt
+next:
+  success: review
+  failure: implementation

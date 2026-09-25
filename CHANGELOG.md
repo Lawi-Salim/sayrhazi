@@ -1,5 +1,16 @@
 # Changelog Sayrhazi
 
+## 0.3.0 — 2026-09-25
+
+- Présentation : uniquement à l'ouverture ou sur demande, jamais à chaque réponse ; contexte utilisé sans être réaffiché, interdiction de commencer par « En tant que ... pour le projet ... ».
+- Typographie française exigée dans chaque fichier agent (accents, apostrophes, cédilles).
+
+- `remove sayrhazi` interactif : simulation + confirmation `yes`, `--yes` direct pour scripts.
+
+- Banner ASCII affiché par `sayrhazi` et `info sayrhazi` (`engine/banner.py`, version lue depuis `VERSION`, autres sorties gardées analysables).
+
+- Nouvelle arborescence : `core/` (agents en trios + workflow + schemas + rules + templates), `runtimes/opencode/` (adaptateur : agents .md, templates, scripts), `engine/` (installer, checker, updater, renderer, resolver, state), `cli/` (install, check, update, remove, info), `tests/`, `pyproject.toml`, `VERSION`. `engine/renderer.py` régénère les adaptateurs depuis les trios (vérifié byte-identique, `--check`). 13 tests stdlib (`tests/test_core.py`, `test_cli.py`, `test_integration.py`). Recâblage complet des chemins ; install/update/check validés en non-régression.
+
 ## 0.2.4 — 2026-09-22
 
 - Fix validation : `technical:` ajouté aux clés explicites de `validate` et `tunda` (une config sans section `technical` passait silencieusement).

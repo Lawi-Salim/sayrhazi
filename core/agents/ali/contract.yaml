@@ -1,0 +1,26 @@
+id: ali
+input:
+  required:
+    - sayrhazi.yaml
+    - AGENTS.md
+    - plan.txt
+  optional:
+    - captures
+    - rendu navigateur
+output:
+  report: design.txt
+  contains:
+    - projet
+    - tache
+    - maquettes et specs
+    - fichiers crees
+    - limites
+    - verdict
+  verdicts:
+    - PROPOSÉ
+    - VALIDÉ
+permissions:
+  code: create-visual-only
+rules:
+  - ne modifie jamais un fichier existant ni la logique metier
+  - verdict PROPOSÉ ou VALIDÉ uniquement

@@ -31,4 +31,4 @@ dist/
 build/
 
 # Brouillons locaux (idees, audits) — jamais pushes
-/idee-automation/
+# /idee-automation/

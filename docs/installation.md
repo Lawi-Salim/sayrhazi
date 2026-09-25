@@ -9,7 +9,7 @@ L'installation nécessite uniquement un projet existant, Git est recommandé, et
 Inutile d'ouvrir le dépôt Sayrhazi : le script retrouve sa source tout seul. Depuis le projet cible :
 
 ```powershell
-& "C:\Users\Lawibrahim\Documents\Sayrhazi\scripts\Install-Sayrhazi.ps1" -ProjectPath "."
+& "C:\Users\Lawibrahim\Documents\Sayrhazi\runtimes\opencode\scripts\Install-Sayrhazi.ps1" -ProjectPath "."
 ```
 
 Avec la fonction de profil (voir `SAYRHAZI_HOME`) :
@@ -23,7 +23,7 @@ tunda sayrhazi
 
 ```powershell
 cd C:\Users\Lawibrahim\Documents\Sayrhazi
-.\scripts\Install-Sayrhazi.ps1 -ProjectPath "C:\Users\Lawibrahim\Documents\MonProjet"
+.\runtimes\opencode\scripts\Install-Sayrhazi.ps1 -ProjectPath "C:\Users\Lawibrahim\Documents\MonProjet"
 ```
 
 ## Linux et macOS
@@ -31,8 +31,8 @@ cd C:\Users\Lawibrahim\Documents\Sayrhazi
 Rendre le script exécutable puis l'appeler avec la racine du projet :
 
 ```bash
-chmod +x scripts/install-sayrhazi.sh
-./scripts/install-sayrhazi.sh /chemin/vers/MonProjet
+chmod +x runtimes/opencode/scripts/install-sayrhazi.sh
+./runtimes/opencode/scripts/install-sayrhazi.sh /chemin/vers/MonProjet
 ```
 
 ## Ce que fait l'installation
@@ -47,7 +47,7 @@ Compléter `.opencode/sayrhazi.yaml`, notamment `project.name`, les commandes r�
 
 ```powershell
 tunda sayrhazi
-# ou sans alias : python "$env:SAYRHAZI_HOME/scripts/tunda.py" sayrhazi --project .
+# ou sans alias : python "$env:SAYRHAZI_HOME/cli/commands/check.py" sayrhazi --project .
 ```
 
 Ouvrir ensuite OpenCode depuis la racine du projet utilisateur, pas depuis le dépôt Sayrhazi.
@@ -58,7 +58,7 @@ Quand le noyau évolue, mettre à jour depuis un projet déjà intégré :
 
 ```powershell
 update sayrhazi
-# ou multi-plateforme : python scripts/update-sayrhazi.py --project <projet>
+# ou multi-plateforme : python cli/main.py update --project <projet>
 ```
 
 Cela réinstalle agents + `watch-work.py` (mis à jour avec `-Force`), affiche `version projet -> noyau`, signale les fichiers `agent/*.md` inconnus du noyau (suppression manuelle), puis relance le check. Configuration, rapports, historiques, décisions et `AGENTS.md` ne sont jamais écrasés.
