@@ -24,6 +24,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -40,6 +41,18 @@ STATUS_RE = re.compile(r"^\s*status\s*:\s*(\S.*?)\s*$", re.MULTILINE | re.IGNORE
 
 def log(message: str) -> None:
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}", flush=True)
+
+
+TICK_SECONDS = 30
+
+
+def format_duration(seconds: float) -> str:
+    """Duree compacte : 5s, 8s, 1m, 2m14s."""
+    total = max(0, int(seconds))
+    if total < 60:
+        return f"{total}s"
+    minutes, rest = divmod(total, 60)
+    return f"{minutes}m" if rest == 0 else f"{minutes}m{rest:02d}s"
 
 
 def find_project_root(start: Path) -> Optional[Path]:
@@ -107,6 +120,15 @@ def check_opencode_available() -> bool:
 def trigger_agent(project_root: Path, task_id: str) -> bool:
     prompt = f"Review Sayrhazi task {task_id} : lis .opencode/resume/build.txt et produis review.txt"
     log(f"build.txt TERMINÉ ({task_id}) -> appel de {AGENT_TO_TRIGGER}...")
+    start = time.time()
+    stop_tick = threading.Event()
+
+    def tick() -> None:
+        while not stop_tick.wait(TICK_SECONDS):
+            log(f"{AGENT_TO_TRIGGER} en cours... {format_duration(time.time() - start)} ecoulees ({task_id})")
+
+    ticker = threading.Thread(target=tick, daemon=True)
+    ticker.start()
     try:
         if IS_WINDOWS:
             command_str = f'opencode run --agent {AGENT_TO_TRIGGER} "{prompt}"'
@@ -117,11 +139,14 @@ def trigger_agent(project_root: Path, task_id: str) -> bool:
         log("ERREUR : commande 'opencode' introuvable.")
         return False
     except subprocess.TimeoutExpired:
-        log("ERREUR : timeout 600s sur appel Hadji.")
+        log(f"ERREUR : timeout 600s sur appel Hadji ({task_id}, {format_duration(time.time() - start)} ecoulees).")
         return False
     except Exception as exc:
         log(f"ERREUR inattendue : {exc}")
         return False
+    finally:
+        stop_tick.set()
+        ticker.join()
     if result.stdout:
         print(result.stdout)
     if result.returncode != 0:
@@ -129,7 +154,7 @@ def trigger_agent(project_root: Path, task_id: str) -> bool:
         if result.stderr:
             print(result.stderr)
         return False
-    log(f"{AGENT_TO_TRIGGER} terminé pour {task_id}.")
+    log(f"{AGENT_TO_TRIGGER} terminé pour {task_id} en {format_duration(time.time() - start)}.")
     review = project_root / ".opencode" / "resume" / "review.txt"
     if not review.is_file():
         log("ATTENTION : review.txt absent après déclenchement. Vérifie la session Hadji.")
@@ -220,7 +245,8 @@ def main() -> int:
             current = file_hash(build_file)
             if current != last_hash_seen:
                 last_hash_seen = current
-                one_pass()
+                if one_pass():
+                    log("En attente d'une autre tâche... (Ctrl+C pour arrêter)")
             time.sleep(POLL_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         log("Arrêt (Ctrl+C).")

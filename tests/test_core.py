@@ -125,6 +125,24 @@ class TestReport(unittest.TestCase):
                                          output_text="review sans identifiant"))
 
 
+class TestAgentContracts(unittest.TestCase):
+    def test_bloc_contrat_machine_exige(self):
+        import re as _re
+        for trio in sorted((ROOT / "core" / "agents").iterdir()):
+            if not trio.is_dir():
+                continue
+            agent_yaml = (trio / "agent.yaml").read_text(encoding="utf-8")
+            role = _re.search(r"^role:\s*(.+)$", agent_yaml, _re.M)
+            self.assertIsNotNone(role, trio.name)
+            body = (trio / "instructions.md").read_text(encoding="utf-8")
+            for marker in ("task_id:", "completed_at:", "summary:"):
+                self.assertIn(marker, body, f"{trio.name} : `{marker}` absent des instructions")
+            self.assertIn(f"agent: {role.group(1).strip()}", body, f"{trio.name} : `agent: {role.group(1).strip()}` absent")
+            contract = (trio / "contract.yaml").read_text(encoding="utf-8")
+            for marker in ("- task_id", "- agent", "- completed_at", "- summary"):
+                self.assertIn(marker, contract, f"{trio.name} : `{marker}` absent du contrat")
+
+
 class TestState(unittest.TestCase):
     def test_roundtrip(self):
         from state import default_state, load_state, save_state

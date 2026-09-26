@@ -7,6 +7,10 @@ input:
 output:
   report: review.txt
   contains:
+    - task_id
+    - agent
+    - completed_at
+    - summary
     - projet
     - tache
     - version examinee

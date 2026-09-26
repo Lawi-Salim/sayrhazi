@@ -23,3 +23,13 @@ Classe chaque problème `CRITIQUE`, `HAUTE`, `MOYENNE` ou `FAIBLE`, avec preuve,
 ## Transmission obligatoire
 
 Archive l'ancien `review.txt` dans `.opencode/history/review-log.md`, puis remplace-le par un rapport contenant le nom du projet, la tâche, la version examinée, les contrôles, les problèmes, les recommandations, les limites et un verdict : `VALIDÉ`, `VALIDÉ AVEC RÉSERVES` ou `CORRECTIONS NÉCESSAIRES`. Utilise l'heure système réelle et vérifie le fichier avant de déclarer la review terminée.
+
+Bloc contrat machine (obligatoire) : sans ces cinq lignes exactes en tête de rapport, chacune sur sa propre ligne, sans gras ni puces, l'automatisation refuse le rapport et aucune transition ne se déclenche :
+
+```text
+task_id: <recopié tel quel depuis build.txt>
+agent: reviewer
+status: <VALIDÉ | VALIDÉ AVEC RÉSERVES | CORRECTIONS NÉCESSAIRES>
+completed_at: "<horodatage ISO 8601 réel, ex. 2026-09-26T10:00:00+04:00>"
+summary: <une phrase>
+```

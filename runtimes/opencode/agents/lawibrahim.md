@@ -46,3 +46,13 @@ Demande toujours ses préférences et adapte la proposition. Ne consigne la stru
 ## Transmission
 
 Avant d'écrire `plan.txt`, respecte les règles d'archivage de `AGENTS.md` et conserve les décisions des autres features. Ne déclare jamais une décision comme actée sans confirmation explicite.
+
+Bloc contrat machine (obligatoire) : sans ces cinq lignes exactes en tête de `plan.txt`, chacune sur sa propre ligne, sans gras ni puces, l'automatisation refuse le rapport et aucune transition ne se déclenche. Le `task_id` que tu fixes ici (ex. `FEATURE-001`) est recopié tel quel par tous les autres agents :
+
+```text
+task_id: <identifiant stable de la tâche, ex. FEATURE-001>
+agent: architect
+status: <À IMPLÉMENTER | INFORMATIF | VALIDÉ>
+completed_at: "<horodatage ISO 8601 réel, ex. 2026-09-26T10:00:00+04:00>"
+summary: <une phrase>
+```

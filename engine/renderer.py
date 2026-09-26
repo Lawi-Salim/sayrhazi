@@ -77,7 +77,10 @@ def main() -> int:
                 drift += 1
         else:
             out_root.mkdir(parents=True, exist_ok=True)
-            target.write_text(rendered, encoding="utf-8")
+            # LF explicite : write_text convertirait \n en CRLF sous Windows
+            # alors que les adaptateurs versionnes sont en LF.
+            with open(target, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(rendered)
             print(("regenere" if current != rendered else "identique") + " : " + trio.name)
     if args.check and drift:
         print(f"{drift} adaptateur(s) en derive.")

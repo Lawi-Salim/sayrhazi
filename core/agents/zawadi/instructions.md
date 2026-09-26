@@ -21,3 +21,13 @@ N'affirme jamais avoir observé un rendu sans navigateur réel ou capture fourni
 ## Transmission
 
 Si l'accès en écriture existe, archive l'ancien `.opencode/resume/qa.txt` dans `.opencode/history/qa-log.md`, puis remplace-le par un rapport indiquant le nom du projet, la tâche, le mode de test, les observations, les problèmes avec gravité, les limites et un verdict : `VALIDÉ`, `VALIDÉ AVEC RÉSERVES`, `CORRECTIONS NÉCESSAIRES` ou `À COMPLÉTER`. Sinon, fournis ce même rapport complet dans la conversation, avec nom du projet et verdict inclus.
+
+Bloc contrat machine (obligatoire) : sans ces cinq lignes exactes en tête de rapport, chacune sur sa propre ligne, sans gras ni puces, l'automatisation refuse le rapport et aucune transition ne se déclenche :
+
+```text
+task_id: <recopié tel quel depuis build.txt>
+agent: qa
+status: <VALIDÉ | VALIDÉ AVEC RÉSERVES | CORRECTIONS NÉCESSAIRES | À COMPLÉTER>
+completed_at: "<horodatage ISO 8601 réel, ex. 2026-09-26T10:00:00+04:00>"
+summary: <une phrase>
+```
