@@ -55,7 +55,7 @@ Seule la transition `build.txt → Hadji` est automatisée. Hifadhui, Zawadi et 
 
 ## Watcher actuel (`runtimes/opencode/scripts/watch-work.py`, installé dans `.opencode/`)
 
-Le watcher surveille `.opencode/resume/build.txt` et lance Hadji uniquement si le rapport est complet : fichier stable (anti écriture en cours), `task_id` présent et `status: TERMINÉ`. Il refuse les statuts incomplets (`EN COURS`, `BLOQUÉ`, absent), empêche les doubles déclenchements (`task_id` + hash déjà traité), applique un timeout et vérifie que `review.txt` mentionne le même `task_id`.
+Le watcher surveille `.opencode/resume/build.txt` et lance Hadji uniquement si le rapport est complet : fichier stable (anti écriture en cours), `task_id` présent et `status: TERMINÉ`. Il refuse les statuts incomplets (`EN COURS`, `BLOQUÉ`, absent), empêche les doubles déclenchements (`task_id` + hash déjà traité en mémoire, plus `review.txt` existant pour le même `task_id` après redémarrage), applique un timeout et vérifie que `review.txt` mentionne le même `task_id`. Un nouveau `build.txt` de Bamse (plus récent que la revue, ex. après `CORRECTIONS NÉCESSAIRES`) relance légitimement la transition.
 
 Modes utiles : `--check` (valide la config sans surveiller), `--once` (une seule vérification, exit `0` si déclenché), `--timeout SEC`.
 

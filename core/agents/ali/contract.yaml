@@ -16,6 +16,10 @@ output:
     - summary
     - projet
     - tache
+    - references citees (2 a 3, avec retenu et rejete)
+    - palette (hexadecimal, roles, ratios)
+    - typographie (font-family titres et texte, echelle)
+    - tokens (rayons, espacements, themes)
     - maquettes et specs
     - fichiers crees
     - limites
@@ -28,3 +32,6 @@ permissions:
 rules:
   - ne modifie jamais un fichier existant ni la logique metier
   - verdict PROPOSÉ ou VALIDÉ uniquement
+  - fondations (palette, typographie, tokens) avant les ecrans
+  - 2 a 3 references reelles citees, aucun asset copie
+  - cible URL visitee via navigateur avant toute adaptation

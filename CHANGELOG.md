@@ -1,8 +1,12 @@
 # Changelog Sayrhazi
 
+## 0.4.2 — 2026-09-26
+
+- Directive design Ali : méthode en 4 temps (cadrer selon `project.type`, chercher 2 à 3 références réelles citées avec retenu et rejeté, fonder palette/typographie/tokens avant de maquetter, maquetter sans plagier avec sources créditées). Correspondance type → attendus (`application` → dashboard, `website` → landing, `api` → portail docs, `library` → docs et playground). `contract.yaml` aligné, `docs/agents.md` à jour, nouveau test `TestAliDirective`. Protocole de recherche obligatoire : cible URL fournie visitée via Playwright avant toute adaptation (structure, palette, typo analysées puis adaptées aux contenus du projet, jamais copiées), 2 à 3 références sinon, indisponibilité outils déclarée. MCP galerie en évaluation manuelle.
+
 ## 0.4.1 — 2026-09-26
 
-- Fix `task_id` : les instructions des six agents exigent désormais le bloc contrat machine en tête de rapport (`task_id:`, `agent:`, `status:` du rôle, `completed_at:`, `summary:`, sans gras ni puces) — sans lui le watcher refusait (cas Bamse/Sarhi). Contrats `contract.yaml` alignés, coquille `A IMPLÉMENTER` corrigée, `VALIDÉ` ajouté aux verdicts plan. Nouveau test `TestAgentContracts`. `renderer.py` force le LF (corrige la régénération CRLF sous Windows). `watch-work.py` : minuteur visible (tick toutes les 30 s pendant l'appel, durée `5s`/`1m`/`2m14s` à la fin) + ligne `En attente d'une autre tâche...` après chaque transition réussie (fini l'impression de freeze).
+- Fix `task_id` : les instructions des six agents exigent désormais le bloc contrat machine en tête de rapport (`task_id:`, `agent:`, `status:` du rôle, `completed_at:`, `summary:`, sans gras ni puces) — sans lui le watcher refusait (cas Bamse/Sarhi). Contrats `contract.yaml` alignés, coquille `A IMPLÉMENTER` corrigée, `VALIDÉ` ajouté aux verdicts plan. Nouveau test `TestAgentContracts`. `renderer.py` force le LF (corrige la régénération CRLF sous Windows). `watch-work.py` : minuteur visible (tick toutes les 30 s pendant l'appel, durée `5s`/`1m`/`2m14s` à la fin) + ligne `En attente d'une autre tâche...` après chaque transition réussie (fini l'impression de freeze) + point 7 du contrat (un `review.txt` plus récent que `build.txt` pour le même `task_id` bloque tout redéclenchement après redémarrage, sans bloquer le retour après corrections).
 
 ## 0.4.0 — 2026-09-26
 
