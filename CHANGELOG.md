@@ -1,5 +1,9 @@
 # Changelog Sayrhazi
 
+## 0.4.1 — 2026-09-26
+
+- Fix `task_id` : les instructions des six agents exigent désormais le bloc contrat machine en tête de rapport (`task_id:`, `agent:`, `status:` du rôle, `completed_at:`, `summary:`, sans gras ni puces) — sans lui le watcher refusait (cas Bamse/Sarhi). Contrats `contract.yaml` alignés, coquille `A IMPLÉMENTER` corrigée, `VALIDÉ` ajouté aux verdicts plan. Nouveau test `TestAgentContracts`. `renderer.py` force le LF (corrige la régénération CRLF sous Windows). `watch-work.py` : minuteur visible (tick toutes les 30 s pendant l'appel, durée `5s`/`1m`/`2m14s` à la fin) + ligne `En attente d'une autre tâche...` après chaque transition réussie (fini l'impression de freeze).
+
 ## 0.4.0 — 2026-09-26
 
 - Lot 1 contrats : statuts figés (`TERMINÉ` = achèvement, `VALIDÉ` = verdict, `VALIDÉ` ajouté pour `plan.txt`), `completed_at` ISO remplace `version` comme horodatage (refusé avec message), `task_id` stable (`FEATURE-001` ou `MPANGO-2026-014`), `agents_required` + indicateurs `security/visual_qa/design_required` avec règle de cohérence.

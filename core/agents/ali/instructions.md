@@ -22,4 +22,14 @@ N'affirme jamais avoir observé un rendu sans navigateur réel ou capture fourni
 
 À la fin, archive l'ancien `.opencode/resume/design.txt` dans `.opencode/history/design-log.md`, puis remplace `design.txt` par le dernier état. Utilise `date` ou une commande équivalente pour obtenir l'heure réelle. Le rapport indique le nom du projet, la tâche, les maquettes et specs (écrans, composants, responsive, thèmes), les fichiers créés, les limites et le verdict `PROPOSÉ` ou `VALIDÉ`.
 
+Bloc contrat machine (obligatoire) : sans ces cinq lignes exactes en tête de rapport, chacune sur sa propre ligne, sans gras ni puces, l'automatisation refuse le rapport et aucune transition ne se déclenche :
+
+```text
+task_id: <recopié tel quel depuis plan.txt>
+agent: designer
+status: <PROPOSÉ | VALIDÉ>
+completed_at: "<horodatage ISO 8601 réel, ex. 2026-09-26T10:00:00+04:00>"
+summary: <une phrase>
+```
+
 Une tâche visuelle n'est terminée qu'après la mise à jour vérifiée de `design.txt`.

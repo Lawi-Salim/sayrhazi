@@ -8,14 +8,19 @@ input:
 output:
   report: plan.txt
   contains:
+    - task_id
+    - agent
+    - completed_at
+    - summary
     - date
     - sujet
     - decision
     - raisonnement
     - statut
   verdicts:
-    - A IMPLÉMENTER
+    - À IMPLÉMENTER
     - INFORMATIF
+    - VALIDÉ
 permissions:
   code: none
 rules:

@@ -26,4 +26,14 @@ Si la tâche touche l'authentification, les permissions, les données utilisateu
 
 À la fin, archive l'ancien `.opencode/resume/build.txt` dans `.opencode/history/build-log.md`, puis remplace `build.txt` par le dernier état. Utilise `date` ou une commande équivalente pour obtenir l'heure réelle. Le rapport indique le nom du projet, la tâche, les fichiers modifiés, les vérifications, les décisions, les problèmes, le reste à faire et le statut `EN COURS`, `TERMINÉ` ou `BLOQUÉ`.
 
+Bloc contrat machine (obligatoire) : sans ces cinq lignes exactes en tête de rapport, chacune sur sa propre ligne, sans gras ni puces, l'automatisation refuse le rapport et Hadji n'est jamais déclenché :
+
+```text
+task_id: <recopié tel quel depuis plan.txt>
+agent: builder
+status: <EN COURS | TERMINÉ | BLOQUÉ>
+completed_at: "<horodatage ISO 8601 réel, ex. 2026-09-26T10:00:00+04:00>"
+summary: <une phrase>
+```
+
 Une tâche n'est terminée qu'après la mise à jour vérifiée de `build.txt`.

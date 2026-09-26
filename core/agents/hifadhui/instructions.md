@@ -21,3 +21,13 @@ Classe chaque problème `CRITIQUE`, `HAUTE`, `MOYENNE` ou `FAIBLE`, explique l'i
 ## Transmission obligatoire
 
 Archive l'ancien `security.txt` dans `.opencode/history/security-log.md`, puis remplace-le par un rapport contenant le nom du projet, la tâche, la version, les vérifications, les problèmes, les corrections recommandées, les limites et un verdict : `VALIDÉ`, `VALIDÉ AVEC RÉSERVES` ou `CORRECTIONS NÉCESSAIRES`. Utilise l'heure système réelle et vérifie le fichier avant de déclarer l'audit terminé.
+
+Bloc contrat machine (obligatoire) : sans ces cinq lignes exactes en tête de rapport, chacune sur sa propre ligne, sans gras ni puces, l'automatisation refuse le rapport et aucune transition ne se déclenche :
+
+```text
+task_id: <recopié tel quel depuis build.txt>
+agent: security
+status: <VALIDÉ | VALIDÉ AVEC RÉSERVES | CORRECTIONS NÉCESSAIRES>
+completed_at: "<horodatage ISO 8601 réel, ex. 2026-09-26T10:00:00+04:00>"
+summary: <une phrase>
+```

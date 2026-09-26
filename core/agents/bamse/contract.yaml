@@ -10,6 +10,10 @@ input:
 output:
   report: build.txt
   contains:
+    - task_id
+    - agent
+    - completed_at
+    - summary
     - projet
     - tache
     - fichiers modifies

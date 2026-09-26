@@ -10,6 +10,10 @@ input:
 output:
   report: qa.txt
   contains:
+    - task_id
+    - agent
+    - completed_at
+    - summary
     - projet
     - tache
     - mode de test
