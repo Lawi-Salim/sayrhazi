@@ -1,10 +1,22 @@
-# Schéma de tâche Sayrhazi (référence ; application stricte : lots automation).
-# Champs requis : task_id, title, status. Agents désignés par rôles stables.
+# Schéma de tâche Sayrhazi (référence normative ; application stricte : lots automation).
+# Champs requis : task_id, title, status. Agents désignés par rôles stables
+# (architect, designer, builder, reviewer, security, qa), jamais par noms d'affichage.
+# task_id : chaîne stable recopiée dans chaque rapport, ex. FEATURE-001 ou
+# MPANGO-2026-014 (les deux formats sont acceptés, le validateur exige stabilité et longueur >= 3).
+# status : À IMPLÉMENTER (décision à prendre), INFORMATIF, EN COURS, TERMINÉ
+# (travail achevé), BLOQUÉ, VALIDÉ (décision Lawibrahim prise, déclenche builder au Lot 4).
+# TERMINÉ décrit l'achèvement du travail, VALIDÉ décrit un verdict : ne pas les mélanger.
+# Cohérence (vérifiée par engine/report.py) : security_required: true impose
+# `security` dans agents_required, idem visual_qa_required -> qa, design_required -> designer.
+# Les indicateurs sont des raccourcis lisibles, agents_required reste la source de vérité.
 task:
   required: [task_id, title, status]
   fields:
     task_id: {type: string, stable: true}
     title: {type: string}
-    status: {enum: [À IMPLÉMENTER, INFORMATIF, EN COURS, TERMINÉ, BLOQUÉ]}
-    agents_required: {type: list, items: role}
-    acceptance_criteria: {type: list, items: string}
+    status: {enum: [À IMPLÉMENTER, INFORMATIF, EN COURS, TERMINÉ, BLOQUÉ, VALIDÉ]}
+    agents_required: {type: list, items: role, optional: true}
+    security_required: {type: boolean, optional: true}
+    visual_qa_required: {type: boolean, optional: true}
+    design_required: {type: boolean, optional: true}
+    acceptance_criteria: {type: list, items: string, optional: true}

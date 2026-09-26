@@ -4,6 +4,39 @@
 
 Le cœur de Sayrhazi fonctionne manuellement. L'automatisation est une extension facultative destinée à réduire les transitions répétitives, pas à remplacer les décisions de l'utilisateur.
 
+> Sayrhazi ne doit pas décider à la place de l'utilisateur ; il doit empêcher que le workflow oublie une étape prévue.
+
+Le moteur applique une règle explicite, il ne choisit pas un agent librement :
+
+```text
+un rapport identifié
++ un statut autorisé
++ une condition satisfaite
++ une transition déclarée
+= un agent éligible
+```
+
+Le mode initial reste supervisé (`auto_start: false`) : les transitions techniques prévues peuvent être automatiques, la création ou le lancement d'une tâche importante reste soumis à validation humaine, le déploiement, la suppression et les migrations de données restent toujours soumis à validation humaine, et tout blocage ou ambiguïté est signalé plutôt que deviné.
+
+Les terminaux sont des interfaces d'observation et d'intervention, jamais la mémoire du workflow : l'état indispensable à la reprise vit dans des fichiers projet, lisible après fermeture de l'IDE, arrêt de la machine ou absence prolongée.
+
+Les agents conditionnels ne sont jamais invoqués systématiquement : jamais de parcours automatique `Bamse → Hadji → Hifadhui → Zawadi → Ali`. Chaque tâche déclare ses rôles nécessaires (ex. interface : Bamse/Hadji/Zawadi ; authentification : Bamse/Hadji/Hifadhui sans Zawadi).
+
+## Transitions automatisables cibles vs état actuel
+
+Cible (seulement si déclarées et vérifiées, Lots 1-4) :
+
+```text
+plan validé → Bamse
+build terminé → Hadji
+build terminé + security_required → Hifadhui
+build terminé + visual_qa_required → Zawadi
+plan validé + design_required → Ali
+review avec corrections → retour vers Bamse
+```
+
+Restent toujours humains : décision finale Lawibrahim/utilisateur, lancement d'une tâche importante en mode supervisé, changement de périmètre ou de critères d'acceptation, déploiement, migration ou suppression de données, correction à solutions multiples, blocage ou incohérence non déterministe.
+
 Une première automatisation raisonnable consiste à surveiller `build.txt` et à lancer Hadji lorsque Bamse a produit un rapport complet. Le script doit vérifier un statut explicite et un identifiant de tâche ; une simple modification de fichier ne suffit pas.
 
 ## Workflow prescrit vs transitions automatiques
@@ -44,6 +77,6 @@ Ne pas lancer automatiquement Bamse, ne pas boucler automatiquement après une r
 
 ## Conditions pour une automatisation fiable
 
-Chaque rapport devrait contenir `task_id`, `status`, `agent`, `version` et éventuellement `next_agent`. L'orchestrateur doit attendre que le fichier soit stable, refuser les statuts incomplets, empêcher les doubles déclenchements, appliquer un timeout et signaler les erreurs au lieu de les masquer.
+Chaque rapport doit contenir `task_id`, `status`, `agent`, `completed_at` (ISO 8601, jamais `version`) et `summary`, plus éventuellement `next_agents` (voir `docs/reports.md` et `core/schemas/report.schema.yaml`). L'orchestrateur doit attendre que le fichier soit stable, refuser les statuts incomplets, vérifier que l'auteur déclaré correspond au rôle attendu, empêcher les doubles déclenchements, appliquer un timeout et signaler les erreurs au lieu de les masquer.
 
 Un agent superviseur doté de raisonnement n'est pas nécessaire pour ces transitions déterministes. Il ne devrait être envisagé qu'après stabilisation d'un orchestrateur scripté et seulement pour les cas ambigus.

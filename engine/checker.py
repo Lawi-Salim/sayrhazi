@@ -103,6 +103,27 @@ def main() -> int:
     if not (root / "AGENTS.md").is_file():
         fail("AGENTS.md absent a la racine du projet", install_errors)
 
+    # Rapports (contrat Lot 1) : informatif seulement, ne change jamais le code de sortie.
+    report_notes: list[str] = []
+    try:
+        from report import parse_report, validate_report
+        resume_dir = opencode / "resume"
+        if resume_dir.is_dir():
+            for name in ("plan.txt", "design.txt", "build.txt", "review.txt", "security.txt", "qa.txt"):
+                p = resume_dir / name
+                if not p.is_file():
+                    continue
+                try:
+                    rdata = parse_report(p.read_text(encoding="utf-8", errors="replace"))
+                except OSError:
+                    continue
+                if "task_id" not in rdata:
+                    continue  # ancien rapport sans contrat : ignore
+                for violation in validate_report(rdata):
+                    report_notes.append(f"rapport {name} : {violation}")
+    except ImportError:
+        pass
+
     if install_errors:
         print("Installation Sayrhazi echouee :")
         for error in install_errors:
@@ -113,11 +134,15 @@ def main() -> int:
         print("Sayrhazi installe avec succes.")
         for note in config_notes:
             print(f"- {note}")
+        for note in report_notes:
+            print(f"- [rapport] {note}")
         print("Completez .opencode/sayrhazi.yaml avant utilisation.")
         return 1
 
     print(f"Sayrhazi installe et configure avec succes : {root}")
     print("Les six agents et les dossiers de suivi sont presents.")
+    for note in report_notes:
+        print(f"- [rapport] {note}")
     return 0
 
 
