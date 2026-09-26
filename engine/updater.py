@@ -154,6 +154,11 @@ def main() -> int:
     if watcher.is_file():
         shutil.copy2(watcher, opencode / "watch-work.py")
         updated += 1
+    # workflow.yaml (Lot 2) : créé si absent, jamais touché sinon.
+    tmpl_workflow = core / "runtimes" / "opencode" / "templates" / "workflow.yaml"
+    if not (opencode / "workflow.yaml").is_file() and tmpl_workflow.is_file():
+        shutil.copy2(tmpl_workflow, opencode / "workflow.yaml")
+        print("workflow.yaml créé depuis le modèle (aucun existant à préserver).")
 
     print(f"Sayrhazi mis a jour : version projet={before} -> noyau={latest} (rapports et historique preserves).")
     print(f"Fichiers noyau recopies : {updated}.")

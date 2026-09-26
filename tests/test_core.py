@@ -156,6 +156,57 @@ class TestAliDirective(unittest.TestCase):
             self.assertIn(marker, contract, f"Ali : `{marker}` absent du contrat")
 
 
+class TestWorkflow(unittest.TestCase):
+    def _load(self, name):
+        from workflow import parse_workflow
+        text = (ROOT / name).read_text(encoding="utf-8")
+        data, err = parse_workflow(text)
+        self.assertIsNone(err, err)
+        return data
+
+    def test_reference_conforme(self):
+        from workflow import validate_workflow
+        data = self._load("core/workflow/workflow.yaml")
+        self.assertEqual(validate_workflow(data), [])
+
+    def test_template_egal_reference(self):
+        ref = self._load("core/workflow/workflow.yaml")
+        tmpl = self._load("runtimes/opencode/templates/workflow.yaml")
+        self.assertEqual(tmpl, ref)
+
+    def test_invalides(self):
+        from workflow import parse_workflow, validate_workflow
+        base = ("workflow:\n  mode: supervised\n  auto_start: false\n  max_parallel_agents: 3\n"
+                "stages:\n  - id: review\n    agent: reviewer\n    trigger:\n"
+                "      report: build.txt\n      status: TERMINÉ\n    auto: true\n")
+        self.assertEqual(validate_workflow(parse_workflow(base)[0]), [])
+        variants = [
+            base.replace("agent: reviewer", "agent: nope"),
+            base.replace("status: TERMINÉ", "status: BIDON"),
+            base.replace("auto: true", "auto: true\n    condition: magie_required"),
+            base.replace("- id: review", "- id: review\n  - id: review"),
+            base.replace("auto_start: false", "auto_start: true"),
+            base.replace("mode: supervised", "mode: autopilote"),
+            base.replace("report: build.txt", "report: inconnu.txt"),
+        ]
+        for i, text in enumerate(variants):
+            data, err = parse_workflow(text)
+            problems = [err] if err else validate_workflow(data)
+            self.assertTrue(problems, f"variante {i} acceptée à tort")
+
+    def test_coherence_stages(self):
+        from workflow import parse_workflow
+        data = self._load("core/workflow/workflow.yaml")
+        for stage in data["stages"]:
+            cand = ROOT / "core" / "workflow" / "stages" / (stage["id"] + ".yaml")
+            if not cand.is_file():
+                continue
+            detail, err = parse_workflow(cand.read_text(encoding="utf-8"))
+            self.assertIsNone(err, err)
+            self.assertEqual(detail.get("agent"), stage["agent"], stage["id"])
+            self.assertEqual(detail.get("condition"), stage.get("condition"), stage["id"])
+
+
 class TestState(unittest.TestCase):
     def test_roundtrip(self):
         from state import default_state, load_state, save_state

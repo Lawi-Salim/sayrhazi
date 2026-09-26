@@ -1,5 +1,9 @@
 # Changelog Sayrhazi
 
+## 0.5.0 — 2026-09-26
+
+- Lot 2 config déclarative : `.opencode/workflow.yaml` versionné (parcours lisible, `trigger: {report, status}` + `condition` + `auto`, seule `review` automatique). Référence `core/workflow/workflow.yaml` (cohérence testée avec `stages/`, `qa.yaml` renommé `visual_qa.yaml`), nouveau `engine/workflow.py` (parseur tolérant listes `- `, validation chaînée aux statuts Lot 1). Install/update créent si absent sans jamais écraser, `tunda`/`checker` contrôlent en WARN. 5 nouveaux tests (`TestWorkflow` + install non-destructif).
+
 ## 0.4.2 — 2026-09-26
 
 - Directive design Ali : méthode en 4 temps (cadrer selon `project.type`, chercher 2 à 3 références réelles citées avec retenu et rejeté, fonder palette/typographie/tokens avant de maquetter, maquetter sans plagier avec sources créditées). Correspondance type → attendus (`application` → dashboard, `website` → landing, `api` → portail docs, `library` → docs et playground). `contract.yaml` aligné, `docs/agents.md` à jour, nouveau test `TestAliDirective`. Protocole de recherche obligatoire : cible URL fournie visitée via Playwright avant toute adaptation (structure, palette, typo analysées puis adaptées aux contenus du projet, jamais copiées), 2 à 3 références sinon, indisponibilité outils déclarée. MCP galerie en évaluation manuelle.

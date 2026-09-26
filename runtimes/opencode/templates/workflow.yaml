@@ -1,11 +1,9 @@
-# Workflow Sayrhazi de référence (Lot 2, contrat déclaratif).
-# Versionné avec le projet en `.opencode/workflow.yaml` : parcours lisible par
-# l'humain, sans règles dispersées dans le code. Les étapes désignent des rôles
-# stables (architect, designer, builder, reviewer, security, qa), jamais des
-# noms d'affichage. Validateur : engine/workflow.py. Modèle projet :
-# runtimes/opencode/templates/workflow.yaml.
-# Seule la transition review est automatique aujourd'hui (watch-work.py) ;
-# les autres le deviendront aux Lots 4-5. `auto: false` = orchestration humaine.
+# Workflow Sayrhazi du projet (contrat déclaratif, Lot 2).
+# Copié dans `.opencode/workflow.yaml` à l'installation, jamais écrasé ensuite.
+# Les étapes désignent des rôles stables, jamais des noms d'affichage.
+# `auto: true` = transition prise en charge par le watcher ; `auto: false` =
+# orchestration humaine. Aujourd'hui seule `review` est automatique.
+# Vérifié par `tunda sayrhazi` (présence + validité, jamais bloquant).
 workflow:
   mode: supervised
   auto_start: false

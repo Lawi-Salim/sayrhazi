@@ -1,5 +1,5 @@
 # Etape : QA reelle (Zawadi), si rendu observable.
-id: qa
+id: visual_qa
 agent: qa
 condition: visual_qa_required
 requires:
