@@ -10,7 +10,7 @@ Bamse inspecte le projet, applique les décisions validées, implémente la tâc
 
 ## Ali — design UI/UX
 
-Ali pose les briques visuelles à partir de `plan.txt` : maquettes, écrans, composants, responsive, thèmes. Il écrit `design.txt`. Il crée la structure visuelle neuve, ne modifie ni l'existant ni la logique.
+Ali pose les briques visuelles à partir de `plan.txt` : maquettes, écrans, composants, responsive, thèmes. Il écrit `design.txt`. Il crée la structure visuelle neuve, ne modifie ni l'existant ni la logique. Sa méthode : cadrer la cible selon `project.type` (`application` → dashboard, `website` → landing, `api` → portail docs, `library` → docs et playground), chercher 2 à 3 références réelles citées (retenu et rejeté), fonder (palette hex, font-family, tokens) avant de maquetter, sans plagier (systèmes et proportions empruntés, assets jamais copiés, sources créditées).
 
 ## Hadji — qualité générale
 

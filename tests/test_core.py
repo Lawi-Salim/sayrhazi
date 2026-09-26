@@ -143,6 +143,19 @@ class TestAgentContracts(unittest.TestCase):
                 self.assertIn(marker, contract, f"{trio.name} : `{marker}` absent du contrat")
 
 
+class TestAliDirective(unittest.TestCase):
+    def test_fondations_et_references_exigees(self):
+        body = (ROOT / "core" / "agents" / "ali" / "instructions.md").read_text(encoding="utf-8")
+        for marker in ("font-family", "palette", "Playwright", "2 à 3", "project.type", "ne copie jamais",
+                       "Cible fournie", "Outils indisponibles"):
+            self.assertIn(marker, body, f"Ali : `{marker}` absent des instructions")
+        contract = (ROOT / "core" / "agents" / "ali" / "contract.yaml").read_text(encoding="utf-8")
+        for marker in ("- references citees", "- palette", "- typographie", "- tokens",
+                       "- 2 a 3 references reelles citees", "aucun asset copie",
+                       "- cible URL visitee via navigateur avant toute adaptation"):
+            self.assertIn(marker, contract, f"Ali : `{marker}` absent du contrat")
+
+
 class TestState(unittest.TestCase):
     def test_roundtrip(self):
         from state import default_state, load_state, save_state

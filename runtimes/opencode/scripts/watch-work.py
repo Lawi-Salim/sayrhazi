@@ -4,7 +4,9 @@ watch-work.py — orchestrateur Sayrhazi build.txt TERMINÉ -> Hadji.
 Surveille `.opencode/resume/build.txt`. Déclenche Hadji uniquement si :
 - le fichier est stable (pas en cours d'écriture),
 - il contient un `task_id` stable et un statut `TERMINÉ`,
-- ce couple (task_id + hash) n'a pas déjà été déclenché.
+- ce couple (task_id + hash) n'a pas déjà été déclenché,
+- `review.txt` ne couvre pas déjà ce `task_id` (revue plus récente que build :
+  survit au redémarrage du watcher, point 7 du contrat).
 
 Ne déclenche jamais Bamse, ne boucle pas après review négative,
 ne publie / supprime rien. Vérifie que `review.txt` est produit.
@@ -182,6 +184,22 @@ def should_trigger(build_file: Path, last_trigger: str) -> Tuple[bool, str, Opti
         return False, last_trigger, "task_id absent — rapport incomplet, refusé"
     if status != "TERMINÉ":
         return False, last_trigger, f"status={status or 'absent'} — attendu TERMINÉ, refusé"
+    # Point 7 du contrat : un review.txt plus récent que build.txt et mentionnant
+    # le même task_id prouve que Hadji a déjà traité cette version (même après
+    # redémarrage du watcher, où l'anti-double en mémoire est perdu). Un nouveau
+    # build de Bamse (mtime plus récent) relance légitimement la transition.
+    review_file = build_file.parent / "review.txt"
+    if review_file.is_file():
+        try:
+            review_text = review_file.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            review_text = ""
+        if task_id in review_text:
+            try:
+                if review_file.stat().st_mtime >= build_file.stat().st_mtime:
+                    return False, last_trigger, f"review.txt existe déjà pour {task_id} — déjà traité"
+            except OSError:
+                pass
     key = f"{task_id}:{stable_hash}"
     if key == last_trigger:
         return False, last_trigger, f"{task_id} déjà déclenché"
