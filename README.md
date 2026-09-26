@@ -10,7 +10,7 @@
 ║    \___ \ / _` | | | | '__| '_ \ / _` |_  / | |   ║
 ║     ___) | (_| | |_| | |  | | | | (_| |/ /__| |   ║
 ║    |____/ \__,_|\__, |_|  |_| |_|\__,_/_____|_|   ║
-║                 |___/  v0.4.2 - sayrhazi          ║
+║                 |___/  v0.5.0 - sayrhazi          ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
 ```
@@ -121,7 +121,7 @@ Sayrhazi/      # noyau : core, runtimes/opencode, engine, cli, tests, docs
 MonProjet/     # projet : code + .opencode/ + AGENTS.md
 ```
 
-Chaque projet possède sa propre copie de `.opencode/agent/` (`sayrhazi.yaml`, `opencode.json`, `watch-work.py`, `resume/`, `history/`, `features/`). Les rapports et historiques ne sont jamais partagés entre projets. Les agents ne supposent jamais le nom du projet : ils lisent `.opencode/sayrhazi.yaml`.
+Chaque projet possède sa propre copie de `.opencode/agent/` (`sayrhazi.yaml`, `workflow.yaml`, `opencode.json`, `watch-work.py`, `resume/`, `history/`, `features/`). `.opencode/workflow.yaml` décrit le parcours déclaratif (étapes, déclencheurs, conditions) ; seule la transition `build → Hadji` est automatique, le reste est orchestré par l'humain. Les rapports et historiques ne sont jamais partagés entre projets. Les agents ne supposent jamais le nom du projet : ils lisent `.opencode/sayrhazi.yaml`.
 
 ## Installation dans un projet
 
@@ -142,7 +142,7 @@ Les crochets indiquent un argument optionnel : sans argument, la commande vise l
 | Commande | Usage | Effet |
 |---|---|---|
 | `sayrhazi [chemin]` | installe + contrôle | Agents + watcher recopiés, config créée si absente, état préservé |
-| `tunda sayrhazi` | diagnostic | Checklist : structure, 6 agents, 0 `A_COMPLETER`, schéma, contrat des rapports (signalé, jamais bloquant), version vs noyau (exit 0/1/2) |
+| `tunda sayrhazi` | diagnostic | Checklist : structure, 6 agents, 0 `A_COMPLETER`, schéma, contrat des rapports + `workflow.yaml` (signalés, jamais bloquants), version vs noyau (exit 0/1/2) |
 | `update sayrhazi` | mise à jour | Agents + watcher, migration douce + backup, version alignée, check relancé |
 | `info sayrhazi` | renseigne | Banner + versions, agents, rapports (lecture seule) |
 | `remove sayrhazi [--yes]` | retire prudemment | Simulation + confirmation ; fichiers noyau seuls, jamais config/rapports/historique |

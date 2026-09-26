@@ -33,6 +33,10 @@ if [[ ! -e "$OPENCODE_DIR/opencode.json" ]]; then
   cp "$ADAPTER_ROOT/templates/opencode.json" "$OPENCODE_DIR/opencode.json"
 fi
 
+if [[ ! -e "$OPENCODE_DIR/workflow.yaml" ]]; then
+  cp "$ADAPTER_ROOT/templates/workflow.yaml" "$OPENCODE_DIR/workflow.yaml"
+fi
+
 # Le watcher est contrôlé par Sayrhazi : il est mis à jour à chaque install.
 if [[ -e "$ADAPTER_ROOT/scripts/watch-work.py" ]]; then
   cp "$ADAPTER_ROOT/scripts/watch-work.py" "$OPENCODE_DIR/watch-work.py"

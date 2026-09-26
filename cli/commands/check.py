@@ -31,6 +31,11 @@ try:
     HAS_REPORT_CHECK = True
 except ImportError:
     HAS_REPORT_CHECK = False
+try:
+    from workflow import parse_workflow, validate_workflow
+    HAS_WORKFLOW_CHECK = True
+except ImportError:
+    HAS_WORKFLOW_CHECK = False
 
 REQUIRED_AGENTS = ("ali.md", "bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md")
 REQUIRED_DIRS = ("agent", "resume", "history", "features")
@@ -219,6 +224,26 @@ def main() -> int:
                 bad += 1
         if checked and not bad:
             ok(f"rapports conformes ({checked})")
+
+    # 9. workflow (contrat Lot 2 : informatif seulement, jamais bloquant)
+    if HAS_WORKFLOW_CHECK:
+        wf = opencode / "workflow.yaml"
+        if not wf.is_file():
+            warn("workflow.yaml absent (lance `update sayrhazi` pour le créer)")
+        else:
+            try:
+                wdata, werr = parse_workflow(wf.read_text(encoding="utf-8", errors="replace"))
+            except OSError as exc:
+                wdata, werr = None, f"illisible: {exc}"
+            if werr:
+                warn(f"workflow.yaml illisible : {werr}")
+            else:
+                violations = validate_workflow(wdata)
+                for v in violations:
+                    warn(f"workflow.yaml : {v}")
+                if not violations:
+                    stages = wdata.get("stages", [])
+                    ok(f"workflow.yaml conforme ({len(stages)} étapes)")
 
     # 7. version installee vs noyau (invitation seulement, jamais bloquant)
     installed = _read_workflow_version(config) if config.is_file() else None

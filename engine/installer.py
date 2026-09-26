@@ -29,7 +29,8 @@ def install_project(project: Path, core: Path) -> None:
     templates = core / "runtimes" / "opencode" / "templates"
     for name, dest in (("AGENTS.md", project / "AGENTS.md"),
                        ("sayrhazi.yaml", opencode / "sayrhazi.yaml"),
-                       ("opencode.json", opencode / "opencode.json")):
+                       ("opencode.json", opencode / "opencode.json"),
+                       ("workflow.yaml", opencode / "workflow.yaml")):
         if not dest.is_file():
             shutil.copy2(templates / name, dest)
 

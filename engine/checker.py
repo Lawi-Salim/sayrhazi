@@ -103,6 +103,26 @@ def main() -> int:
     if not (root / "AGENTS.md").is_file():
         fail("AGENTS.md absent a la racine du projet", install_errors)
 
+    # Workflow (contrat Lot 2) : informatif seulement, ne change jamais le code de sortie.
+    workflow_notes: list[str] = []
+    try:
+        from workflow import parse_workflow, validate_workflow
+        workflow_file = opencode / "workflow.yaml"
+        if not workflow_file.is_file():
+            workflow_notes.append("workflow.yaml absent (lance `update sayrhazi` pour le créer)")
+        else:
+            try:
+                wdata, werr = parse_workflow(workflow_file.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                wdata, werr = None, "illisible"
+            if werr:
+                workflow_notes.append(f"workflow.yaml illisible : {werr}")
+            else:
+                for violation in validate_workflow(wdata):
+                    workflow_notes.append(f"workflow.yaml : {violation}")
+    except ImportError:
+        pass
+
     # Rapports (contrat Lot 1) : informatif seulement, ne change jamais le code de sortie.
     report_notes: list[str] = []
     try:
@@ -134,6 +154,8 @@ def main() -> int:
         print("Sayrhazi installe avec succes.")
         for note in config_notes:
             print(f"- {note}")
+        for note in workflow_notes:
+            print(f"- [workflow] {note}")
         for note in report_notes:
             print(f"- [rapport] {note}")
         print("Completez .opencode/sayrhazi.yaml avant utilisation.")
@@ -141,6 +163,8 @@ def main() -> int:
 
     print(f"Sayrhazi installe et configure avec succes : {root}")
     print("Les six agents et les dossiers de suivi sont presents.")
+    for note in workflow_notes:
+        print(f"- [workflow] {note}")
     for note in report_notes:
         print(f"- [rapport] {note}")
     return 0

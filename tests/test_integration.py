@@ -43,6 +43,17 @@ class TestIntegration(unittest.TestCase):
             fill_config(project / ".opencode" / "sayrhazi.yaml")
             (project / "AGENTS.md").write_text("# R\n- Cle\n", encoding="utf-8")
 
+    def test_workflow_cree_jamais_ecrase(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            install_project(project, ROOT)
+            wf = project / ".opencode" / "workflow.yaml"
+            self.assertTrue(wf.is_file())
+            wf.write_text("workflow:\n  mode: supervised\n  auto_start: false\n  max_parallel_agents: 1\nstages: []\n",
+                          encoding="utf-8")
+            install_project(project, ROOT)
+            self.assertIn("max_parallel_agents: 1", wf.read_text(encoding="utf-8"))
+
     def test_migration_douce(self):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)

@@ -47,6 +47,11 @@ if (-not (Test-Path -LiteralPath $opencodeJson)) {
     Copy-Item (Join-Path $adapterRoot 'templates/opencode.json') $opencodeJson
 }
 
+$workflow = Join-Path $opencode 'workflow.yaml'
+if (-not (Test-Path -LiteralPath $workflow)) {
+    Copy-Item (Join-Path $adapterRoot 'templates/workflow.yaml') $workflow
+}
+
 # Le watcher est contrôlé par Sayrhazi : il est mis à jour avec -Force.
 $watcherSource = Join-Path $adapterRoot 'scripts/watch-work.py'
 if (Test-Path -LiteralPath $watcherSource) {
