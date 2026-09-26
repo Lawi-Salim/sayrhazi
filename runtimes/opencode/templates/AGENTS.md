@@ -24,8 +24,8 @@ Ce projet utilise le workflow Sayrhazi. Les agents lisent `.opencode/sayrhazi.ya
 
 - Dernier état dans `.opencode/resume/` : `plan.txt`, `design.txt`, `build.txt`, `review.txt`, `security.txt`, `qa.txt`.
 - Avant remplacement, archiver l'ancien contenu dans `.opencode/history/` (`build-log.md`, `design-log.md`, `review-log.md`, `security-log.md`, `qa-log.md`).
-- Chaque rapport contient : date système réelle, projet, tâche (`task_id` stable, ex. `FEATURE-001`), vérifications, problèmes classés `CRITIQUE / HAUTE / MOYENNE / FAIBLE`, limites, suite et verdict du rôle.
-- Statuts : Bamse `EN COURS / TERMINÉ / BLOQUÉ`, Hadji et Hifadhui `VALIDÉ / VALIDÉ AVEC RÉSERVES / CORRECTIONS NÉCESSAIRES`, Zawadi ajoute `À COMPLÉTER`.
+- Chaque rapport contient : date système réelle, projet, tâche (`task_id` stable, ex. `FEATURE-001`), auteur (`agent`, rôle stable), horodatage `completed_at` (ISO 8601, jamais `version`), résumé (`summary`), vérifications, problèmes classés `CRITIQUE / HAUTE / MOYENNE / FAIBLE`, limites, suite et verdict du rôle.
+- Statuts (`TERMINÉ` = achèvement, `VALIDÉ` = verdict) : Lawibrahim `À IMPLÉMENTER / INFORMATIF / VALIDÉ`, Bamse `EN COURS / TERMINÉ / BLOQUÉ`, Ali `PROPOSÉ / VALIDÉ`, Hadji et Hifadhui `VALIDÉ / VALIDÉ AVEC RÉSERVES / CORRECTIONS NÉCESSAIRES`, Zawadi ajoute `À COMPLÉTER`.
 - Aucun secret, token ou mot de passe dans les rapports.
 
 ## 4. Règles locales du projet — À COMPLÉTER

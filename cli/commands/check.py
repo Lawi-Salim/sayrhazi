@@ -26,6 +26,11 @@ try:
     HAS_SCHEMA_CHECK = True
 except ImportError:
     HAS_SCHEMA_CHECK = False
+try:
+    from report import parse_report, validate_report
+    HAS_REPORT_CHECK = True
+except ImportError:
+    HAS_REPORT_CHECK = False
 
 REQUIRED_AGENTS = ("ali.md", "bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md")
 REQUIRED_DIRS = ("agent", "resume", "history", "features")
@@ -192,6 +197,28 @@ def main() -> int:
         ok("watch-work.py present")
     else:
         warn("watch-work.py absent (relance Sayrhazi-Install pour l'ajouter)")
+
+    # 8. rapports (contrat Lot 1 : informatif seulement, jamais bloquant)
+    if HAS_REPORT_CHECK:
+        checked = 0
+        bad = 0
+        for name in ("plan.txt", "design.txt", "build.txt", "review.txt", "security.txt", "qa.txt"):
+            p = opencode / "resume" / name
+            if not p.is_file():
+                continue
+            try:
+                rdata = parse_report(p.read_text(encoding="utf-8", errors="replace"))
+            except OSError as exc:
+                warn(f"rapport {name} illisible: {exc}")
+                continue
+            if "task_id" not in rdata:
+                continue  # ancien rapport sans contrat : ignore, pas de bruit
+            checked += 1
+            for v in validate_report(rdata):
+                warn(f"rapport {name} : {v}")
+                bad += 1
+        if checked and not bad:
+            ok(f"rapports conformes ({checked})")
 
     # 7. version installee vs noyau (invitation seulement, jamais bloquant)
     installed = _read_workflow_version(config) if config.is_file() else None

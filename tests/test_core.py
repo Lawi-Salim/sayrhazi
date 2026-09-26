@@ -64,6 +64,67 @@ class TestRenderer(unittest.TestCase):
                 self.assertEqual(render_one(trio), expected, trio.name)
 
 
+class TestReport(unittest.TestCase):
+    def test_templates_valides(self):
+        from report import parse_report, validate_report, validate_task
+        task = parse_report((ROOT / "core" / "templates" / "task.md").read_text(encoding="utf-8"))
+        self.assertEqual(validate_task(task), [], validate_task(task))
+        rep = parse_report((ROOT / "core" / "templates" / "report.md").read_text(encoding="utf-8"))
+        self.assertEqual(validate_report(rep), [], validate_report(rep))
+
+    def test_champs_requis(self):
+        from report import parse_report, validate_report
+        rep = parse_report("task_id: FEATURE-001\nagent: builder\nstatus: TERMINÉ\ncompleted_at: \"2026-09-26T10:00:00+04:00\"\n")
+        self.assertTrue(any("summary" in v for v in validate_report(rep)), validate_report(rep))
+
+    def test_statut_par_role(self):
+        from report import parse_report, validate_report
+        ok_review = parse_report("task_id: FEATURE-001\nagent: reviewer\nstatus: VALIDÉ\ncompleted_at: \"2026-09-26T10:00:00+04:00\"\nsummary: OK.\n")
+        self.assertEqual(validate_report(ok_review), [])
+        bad_build = parse_report("task_id: FEATURE-001\nagent: builder\nstatus: VALIDÉ\ncompleted_at: \"2026-09-26T10:00:00+04:00\"\nsummary: Fait.\n")
+        self.assertTrue(any("status" in v for v in validate_report(bad_build)))
+        bad_qa = parse_report("task_id: FEATURE-001\nagent: builder\nstatus: À COMPLÉTER\ncompleted_at: \"2026-09-26T10:00:00+04:00\"\nsummary: Fait.\n")
+        self.assertTrue(any("status" in v for v in validate_report(bad_qa)))
+        ok_qa = parse_report("task_id: FEATURE-001\nagent: qa\nstatus: À COMPLÉTER\ncompleted_at: \"2026-09-26T10:00:00+04:00\"\nsummary: En attente.\n")
+        self.assertEqual(validate_report(ok_qa), [])
+        underscored = parse_report("task_id: FEATURE-001\nagent: reviewer\nstatus: VALIDÉ_AVEC_RÉSERVES\ncompleted_at: \"2026-09-26T10:00:00+04:00\"\nsummary: OK.\n")
+        self.assertEqual(validate_report(underscored), [])
+
+    def test_version_horodatage_refusee(self):
+        from report import parse_report, validate_report
+        rep = parse_report("task_id: FEATURE-001\nagent: builder\nstatus: TERMINÉ\nversion: \"2026-09-23T19:30:00+04:00\"\nsummary: Fait.\n")
+        self.assertTrue(any("version" in v for v in validate_report(rep)))
+
+    def test_task_id_formats(self):
+        from report import parse_report, validate_report
+        for tid in ("FEATURE-001", "MPANGO-2026-014"):
+            rep = parse_report(f"task_id: {tid}\nagent: builder\nstatus: TERMINÉ\ncompleted_at: \"2026-09-26T10:00:00+04:00\"\nsummary: Fait.\n")
+            self.assertEqual(validate_report(rep), [], tid)
+        for tid in ("AB", "a b"):
+            rep = parse_report(f"task_id: {tid}\nagent: builder\nstatus: TERMINÉ\ncompleted_at: \"2026-09-26T10:00:00+04:00\"\nsummary: Fait.\n")
+            self.assertTrue(any("task_id" in v for v in validate_report(rep)), tid)
+
+    def test_coherence_indicateurs(self):
+        from report import parse_report, validate_task
+        incoherent = parse_report("task_id: FEATURE-001\ntitle: T\nstatus: À IMPLÉMENTER\nagents_required: [builder, reviewer]\nsecurity_required: true\n")
+        self.assertTrue(any("security" in v for v in validate_task(incoherent)))
+        coherent = parse_report("task_id: FEATURE-001\ntitle: T\nstatus: À IMPLÉMENTER\nagents_required: [builder, reviewer, security]\nsecurity_required: true\n")
+        self.assertEqual(validate_task(coherent), [])
+
+    def test_transition(self):
+        from report import check_transition, parse_report
+        rep = parse_report("task_id: FEATURE-001\nagent: builder\nstatus: TERMINÉ\ncompleted_at: \"2026-09-26T10:00:00+04:00\"\nsummary: Fait.\n")
+        self.assertEqual(check_transition(rep, expected_agent="builder", expected_task_id="FEATURE-001",
+                                          output_text="review FEATURE-001 ok"), [])
+        self.assertTrue(check_transition(rep, expected_agent="builder", expected_task_id="FEATURE-002"))
+        self.assertTrue(check_transition(rep, expected_agent="reviewer", expected_task_id="FEATURE-001"))
+        stale = parse_report("task_id: FEATURE-001\nagent: builder\nstatus: EN COURS\ncompleted_at: \"2026-09-26T10:00:00+04:00\"\nsummary: WIP.\n")
+        self.assertTrue(check_transition(stale, expected_agent="builder", expected_task_id="FEATURE-001",
+                                         allowed_statuses=("TERMINÉ",)))
+        self.assertTrue(check_transition(rep, expected_agent="builder", expected_task_id="FEATURE-001",
+                                         output_text="review sans identifiant"))
+
+
 class TestState(unittest.TestCase):
     def test_roundtrip(self):
         from state import default_state, load_state, save_state

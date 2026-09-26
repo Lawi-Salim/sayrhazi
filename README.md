@@ -10,7 +10,7 @@
 ║    \___ \ / _` | | | | '__| '_ \ / _` |_  / | |   ║
 ║     ___) | (_| | |_| | |  | | | | (_| |/ /__| |   ║
 ║    |____/ \__,_|\__, |_|  |_| |_|\__,_/_____|_|   ║
-║                 |___/  v0.3.0 - sayrhazi          ║
+║                 |___/  v0.4.0 - sayrhazi          ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
 ```
@@ -89,7 +89,7 @@ Chaque fichier est **remplacé** à chaque passage — il ne contient que le der
 | `security.txt` | Hifadhui | Bamse (si corrections) |
 | `qa.txt` | Zawadi | Bamse (si corrections signalées) |
 
-Chaque rapport contient : date système réelle, projet, tâche (`task_id:` stable, ex. `FEATURE-001`), `status:`, vérifications, problèmes classés `CRITIQUE / HAUTE / MOYENNE / FAIBLE`, limites, suite et verdict du rôle. Aucun secret dans les rapports.
+Chaque rapport contient : date système réelle, projet, tâche (`task_id:` stable, ex. `FEATURE-001`), auteur (`agent:`, rôle stable), horodatage (`completed_at:`, ISO 8601), résumé (`summary:`), `status:`, vérifications, problèmes classés `CRITIQUE / HAUTE / MOYENNE / FAIBLE`, limites, suite et verdict du rôle (`TERMINÉ` = achèvement, `VALIDÉ` = verdict). Aucun secret dans les rapports. Référence : `docs/reports.md`, validateur : `engine/report.py`.
 
 ### Historique (`.opencode/history/`)
 
@@ -97,7 +97,7 @@ Avant de remplacer son fichier `resume/`, chaque agent archive l'ancien contenu 
 
 ## Comment ça se déroule concrètement
 
-1. **Discussion** — avec Lawibrahim. Une fois d'accord, il note la décision dans `plan.txt` (`À IMPLÉMENTER` ou `INFORMATIF`), uniquement après confirmation explicite.
+1. **Discussion** — avec Lawibrahim. Une fois d'accord, il note la décision dans `plan.txt` (`À IMPLÉMENTER`, `INFORMATIF`, puis `VALIDÉ` quand la décision est prise), uniquement après confirmation explicite.
 2. **Design** (si composante visuelle) — Ali maquette à partir de `plan.txt` et écrit `design.txt` (`PROPOSÉ` ou `VALIDÉ`).
 3. **Implémentation** — Bamse consulte `plan.txt` (et `design.txt` si visuel), code, vérifie, écrit `build.txt` (`EN COURS`, `TERMINÉ` ou `BLOQUÉ`).
 4. **Review qualité** — Hadji lit `build.txt`, inspecte le code, écrit `review.txt` (`VALIDÉ`, `VALIDÉ AVEC RÉSERVES` ou `CORRECTIONS NÉCESSAIRES`). Déclenchable auto via `watch-work.py` quand `build.txt` est `TERMINÉ` avec `task_id`.
@@ -131,7 +131,7 @@ Depuis n'importe quel projet (inutile d'ouvrir le dépôt Sayrhazi) :
 & "C:\Users\Lawibrahim\Documents\Sayrhazi\runtimes\opencode\scripts\Install-Sayrhazi.ps1" -ProjectPath "."
 ```
 
-Avec les fonctions de profil : `Sayrhazi .` (installe + contrôle), `tunda sayrhazi` (check détaillé : structure, 6 agents, 0 `A_COMPLETER`, JSON valide, watcher).
+Avec les fonctions de profil : `Sayrhazi .` (installe + contrôle), `tunda sayrhazi` (check détaillé : structure, 6 agents, 0 `A_COMPLETER`, JSON valide, watcher, contrat des rapports signalé sans bloquer).
 
 Le script ne supprime ni ne remplace rapports, historiques, décisions ou configuration existants. Après installation, compléter `.opencode/sayrhazi.yaml`, renseigner les règles locales (`AGENTS.md` §4), puis vérifier avec `tunda sayrhazi`.
 
@@ -142,7 +142,7 @@ Les crochets indiquent un argument optionnel : sans argument, la commande vise l
 | Commande | Usage | Effet |
 |---|---|---|
 | `sayrhazi [chemin]` | installe + contrôle | Agents + watcher recopiés, config créée si absente, état préservé |
-| `tunda sayrhazi` | diagnostic | Checklist : structure, 6 agents, 0 `A_COMPLETER`, schéma, version vs noyau (exit 0/1/2) |
+| `tunda sayrhazi` | diagnostic | Checklist : structure, 6 agents, 0 `A_COMPLETER`, schéma, contrat des rapports (signalé, jamais bloquant), version vs noyau (exit 0/1/2) |
 | `update sayrhazi` | mise à jour | Agents + watcher, migration douce + backup, version alignée, check relancé |
 | `info sayrhazi` | renseigne | Banner + versions, agents, rapports (lecture seule) |
 | `remove sayrhazi [--yes]` | retire prudemment | Simulation + confirmation ; fichiers noyau seuls, jamais config/rapports/historique |
@@ -171,7 +171,7 @@ Le `deny` global empêche les autres agents d'y accéder ; seuls `ali.md` (obser
 
 ## Automatisation
 
-Le cœur fonctionne manuellement ; `watch-work.py` (installé dans `.opencode/`) automatise une seule transition : `build.txt TERMINÉ` + `task_id` → Hadji → vérification de `review.txt`. Le reste du flux (Lawibrahim → Ali → Bamse → Hadji → Hifadhui → Zawadi) est prescrit mais orchestré par l'humain. Il refuse les rapports incomplets, empêche les doubles déclenchements et applique un timeout. Pas de retour auto vers Bamse, pas de boucle après review négative : les décisions restent humaines.
+Le cœur fonctionne manuellement ; `watch-work.py` (installé dans `.opencode/`) automatise une seule transition : `build.txt TERMINÉ` + `task_id` → Hadji → vérification de `review.txt`. Le reste du flux (Lawibrahim → Ali → Bamse → Hadji → Hifadhui → Zawadi) est prescrit mais orchestré par l'humain. Il refuse les rapports incomplets (contrat `task_id` + `agent` + `status` + `completed_at`, voir `docs/reports.md`), empêche les doubles déclenchements et applique un timeout. `tunda` signale les rapports non conformes sans bloquer. Pas de retour auto vers Bamse, pas de boucle après review négative : les décisions restent humaines.
 
 Limites connues : permissions en mode headless, fichiers créés hors projet (Bamse doit travailler dans le projet), sessions longues interrompues.
 

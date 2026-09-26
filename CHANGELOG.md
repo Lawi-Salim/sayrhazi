@@ -1,5 +1,11 @@
 # Changelog Sayrhazi
 
+## 0.4.0 — 2026-09-26
+
+- Lot 1 contrats : statuts figés (`TERMINÉ` = achèvement, `VALIDÉ` = verdict, `VALIDÉ` ajouté pour `plan.txt`), `completed_at` ISO remplace `version` comme horodatage (refusé avec message), `task_id` stable (`FEATURE-001` ou `MPANGO-2026-014`), `agents_required` + indicateurs `security/visual_qa/design_required` avec règle de cohérence.
+- Nouveau `engine/report.py` (stdlib) : `parse_report`, `validate_report`, `validate_task`, `check_transition` (points 3/4/5/7). `tunda` et `checker.py` signalent les rapports non conformes en `[WARN]`/notes, jamais bloquant (anciens rapports sans `task_id` ignorés).
+- Docs : `docs/reports.md` étendu (contrat, statuts, tâche, validation 8 points), `docs/automation.md` et `core/rules/reporting.md` alignés, template projet `AGENTS.md` §3 à jour. 7 nouveaux tests (`TestReport`).
+
 ## 0.3.0 — 2026-09-25
 
 - Présentation : uniquement à l'ouverture ou sur demande, jamais à chaque réponse ; contexte utilisé sans être réaffiché, interdiction de commencer par « En tant que ... pour le projet ... ».
