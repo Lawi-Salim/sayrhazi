@@ -142,7 +142,7 @@ def main() -> int:
     tmpl_yaml = core / "runtimes" / "opencode" / "templates" / "sayrhazi.yaml"
     latest = read_version(tmpl_yaml) or "(inconnue)"
 
-    for d in ("agent", "resume", "history", "features"):
+    for d in ("agent", "resume", "history", "features", "state"):
         (opencode / d).mkdir(parents=True, exist_ok=True)
 
     updated = 0

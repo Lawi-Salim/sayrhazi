@@ -1,5 +1,10 @@
 # Changelog Sayrhazi
 
+## 0.6.0 — 2026-09-26
+
+- Licence : `LICENSE` MIT remplacée par tous droits réservés (ne vaut que pour l'avenir, les versions déjà diffusées restent MIT).
+- Lot 3 état et reprise : `.opencode/state/workflow-state.yaml` (vue de coordination, local, à ignorer par git), `engine/state.py` complété (`reconcile()` en 7 points, `validate_state()`, CLI `--reconcile`). Les rapports invalides ou d'une autre tâche sont ignorés et signalés, une étape terminée n'est jamais relancée (sauf retour `CORRECTIONS NÉCESSAIRES`), toute incohérence est signalée. Install/update créent `state/`, `tunda`/`checker` contrôlent en WARN. 8 nouveaux tests (`TestStateReconcile` + création du dossier).
+
 ## 0.5.0 — 2026-09-26
 
 - Lot 2 config déclarative : `.opencode/workflow.yaml` versionné (parcours lisible, `trigger: {report, status}` + `condition` + `auto`, seule `review` automatique). Référence `core/workflow/workflow.yaml` (cohérence testée avec `stages/`, `qa.yaml` renommé `visual_qa.yaml`), nouveau `engine/workflow.py` (parseur tolérant listes `- `, validation chaînée aux statuts Lot 1). Install/update créent si absent sans jamais écraser, `tunda`/`checker` contrôlent en WARN. 5 nouveaux tests (`TestWorkflow` + install non-destructif).

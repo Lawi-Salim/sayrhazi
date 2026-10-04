@@ -19,7 +19,8 @@ from pathlib import Path
 def install_project(project: Path, core: Path) -> None:
     opencode = project / ".opencode"
     agent_target = opencode / "agent"
-    for d in (agent_target, opencode / "resume", opencode / "history", opencode / "features"):
+    for d in (agent_target, opencode / "resume", opencode / "history", opencode / "features",
+              opencode / "state"):
         d.mkdir(parents=True, exist_ok=True)
 
     adapter_agents = core / "runtimes" / "opencode" / "agents"

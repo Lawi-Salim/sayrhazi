@@ -103,6 +103,25 @@ def main() -> int:
     if not (root / "AGENTS.md").is_file():
         fail("AGENTS.md absent a la racine du projet", install_errors)
 
+    # État (Lot 3) : informatif seulement, ne change jamais le code de sortie.
+    state_notes: list[str] = []
+    try:
+        from state import load_state, validate_state
+        state_dir = opencode / "state"
+        if not state_dir.is_dir():
+            state_notes.append("dossier .opencode/state absent (lance `update sayrhazi` pour le créer)")
+        else:
+            try:
+                current = load_state(root)
+            except (ValueError, RuntimeError) as exc:
+                current = None
+                state_notes.append(f"état illisible : {exc}")
+            if current is not None:
+                for violation in validate_state(current):
+                    state_notes.append(f"état : {violation}")
+    except ImportError:
+        pass
+
     # Workflow (contrat Lot 2) : informatif seulement, ne change jamais le code de sortie.
     workflow_notes: list[str] = []
     try:
@@ -154,6 +173,8 @@ def main() -> int:
         print("Sayrhazi installe avec succes.")
         for note in config_notes:
             print(f"- {note}")
+        for note in state_notes:
+            print(f"- [état] {note}")
         for note in workflow_notes:
             print(f"- [workflow] {note}")
         for note in report_notes:
@@ -163,6 +184,8 @@ def main() -> int:
 
     print(f"Sayrhazi installe et configure avec succes : {root}")
     print("Les six agents et les dossiers de suivi sont presents.")
+    for note in state_notes:
+        print(f"- [état] {note}")
     for note in workflow_notes:
         print(f"- [workflow] {note}")
     for note in report_notes:

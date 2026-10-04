@@ -207,6 +207,81 @@ class TestWorkflow(unittest.TestCase):
             self.assertEqual(detail.get("condition"), stage.get("condition"), stage["id"])
 
 
+class TestStateReconcile(unittest.TestCase):
+    def _project(self, reports):
+        import tempfile
+        tmp = tempfile.mkdtemp()
+        resume = Path(tmp) / ".opencode" / "resume"
+        resume.mkdir(parents=True)
+        for name, body in reports.items():
+            (resume / name).write_text(body, encoding="utf-8")
+        self.addCleanup(__import__("shutil").rmtree, tmp, True)
+        return tmp
+
+    def _report(self, tid, agent, status):
+        return (f"task_id: {tid}\nagent: {agent}\nstatus: {status}\n"
+                'completed_at: "2026-09-26T10:00:00+04:00"\nsummary: Fait.\n')
+
+    def test_frais_adopte_tache(self):
+        from state import reconcile
+        tmp = self._project({"build.txt": self._report("FEATURE-001", "builder", "TERMINÉ")})
+        state, notes = reconcile(tmp)
+        wf = state["workflow"]
+        self.assertEqual(wf["task_id"], "FEATURE-001")
+        self.assertEqual(wf["status"], "IN_PROGRESS")
+        self.assertIn("implementation", wf["completed_stages"])
+        self.assertIn("review", wf["current_stages"])
+        self.assertIn("design", wf["pending_stages"])
+
+    def test_review_validee(self):
+        from state import reconcile
+        tmp = self._project({"build.txt": self._report("FEATURE-001", "builder", "TERMINÉ"),
+                             "review.txt": self._report("FEATURE-001", "reviewer", "VALIDÉ")})
+        state, _ = reconcile(tmp)
+        self.assertIn("review", state["workflow"]["completed_stages"])
+
+    def test_corrections_rouvrent_implementation(self):
+        from state import reconcile
+        tmp = self._project({"build.txt": self._report("FEATURE-001", "builder", "TERMINÉ"),
+                             "review.txt": self._report("FEATURE-001", "reviewer", "CORRECTIONS NÉCESSAIRES")})
+        state, notes = reconcile(tmp, "FEATURE-001")
+        wf = state["workflow"]
+        self.assertIn("review", wf["completed_stages"])
+        self.assertNotIn("implementation", wf["completed_stages"])
+        self.assertTrue(any("corrections" in n for n in notes), notes)
+
+    def test_review_sans_build_bloquee(self):
+        from state import reconcile
+        tmp = self._project({"review.txt": self._report("FEATURE-001", "reviewer", "VALIDÉ")})
+        state, notes = reconcile(tmp, "FEATURE-001")
+        self.assertIn("review", state["workflow"]["blocked_stages"])
+        self.assertTrue(any("bloquée" in n for n in notes), notes)
+
+    def test_autre_tache_ignoree(self):
+        from state import reconcile, save_state, default_state
+        tmp = self._project({"build.txt": self._report("FEATURE-002", "builder", "TERMINÉ")})
+        st = default_state("FEATURE-001")
+        save_state(tmp, st)
+        state, notes = reconcile(tmp)
+        self.assertEqual(state["workflow"]["task_id"], "FEATURE-001")
+        self.assertNotIn("implementation", state["workflow"]["completed_stages"])
+        self.assertTrue(any("autre tâche" in n for n in notes), notes)
+
+    def test_vide_rien_a_reconcilier(self):
+        from state import reconcile
+        tmp = self._project({})
+        state, notes = reconcile(tmp)
+        self.assertIsNone(state)
+        self.assertTrue(notes)
+
+    def test_validate_state(self):
+        from state import validate_state
+        self.assertTrue(validate_state({"workflow": {"task_id": "", "status": "BIZARRE",
+                                                     "current_stages": [], "completed_stages": [],
+                                                     "pending_stages": [], "blocked_stages": [],
+                                                     "running_agents": []}}))
+
+
 class TestState(unittest.TestCase):
     def test_roundtrip(self):
         from state import default_state, load_state, save_state

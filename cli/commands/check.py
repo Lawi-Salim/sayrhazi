@@ -36,6 +36,11 @@ try:
     HAS_WORKFLOW_CHECK = True
 except ImportError:
     HAS_WORKFLOW_CHECK = False
+try:
+    from state import load_state, validate_state
+    HAS_STATE_CHECK = True
+except ImportError:
+    HAS_STATE_CHECK = False
 
 REQUIRED_AGENTS = ("ali.md", "bamse.md", "hadji.md", "hifadhui.md", "lawibrahim.md", "zawadi.md")
 REQUIRED_DIRS = ("agent", "resume", "history", "features")
@@ -224,6 +229,25 @@ def main() -> int:
                 bad += 1
         if checked and not bad:
             ok(f"rapports conformes ({checked})")
+
+    # 10. état (Lot 3 : informatif seulement, jamais bloquant)
+    if HAS_STATE_CHECK:
+        if not (opencode / "state").is_dir():
+            warn("dossier .opencode/state absent (lance `update sayrhazi` pour le créer)")
+        else:
+            try:
+                current = load_state(root)
+            except (ValueError, RuntimeError) as exc:
+                current = None
+                warn(f"état illisible : {exc}")
+            if current is None:
+                ok("aucun état (lance `python engine/state.py --reconcile --project .`)")
+            else:
+                violations = validate_state(current)
+                for v in violations:
+                    warn(f"état : {v}")
+                if not violations:
+                    ok(f"état tâche {current['workflow']['task_id']} : {current['workflow']['status']}")
 
     # 9. workflow (contrat Lot 2 : informatif seulement, jamais bloquant)
     if HAS_WORKFLOW_CHECK:
