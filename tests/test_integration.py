@@ -43,6 +43,12 @@ class TestIntegration(unittest.TestCase):
             fill_config(project / ".opencode" / "sayrhazi.yaml")
             (project / "AGENTS.md").write_text("# R\n- Cle\n", encoding="utf-8")
 
+    def test_state_dir_cree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            install_project(project, ROOT)
+            self.assertTrue((project / ".opencode" / "state").is_dir())
+
     def test_workflow_cree_jamais_ecrase(self):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)

@@ -20,7 +20,8 @@ $directories = @(
     $agentTarget,
     (Join-Path $opencode 'resume'),
     (Join-Path $opencode 'history'),
-    (Join-Path $opencode 'features')
+    (Join-Path $opencode 'features'),
+    (Join-Path $opencode 'state')
 )
 
 foreach ($directory in $directories) {

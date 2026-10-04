@@ -10,7 +10,7 @@
 ║    \___ \ / _` | | | | '__| '_ \ / _` |_  / | |   ║
 ║     ___) | (_| | |_| | |  | | | | (_| |/ /__| |   ║
 ║    |____/ \__,_|\__, |_|  |_| |_|\__,_/_____|_|   ║
-║                 |___/  v0.5.0 - sayrhazi          ║
+║                 |___/  v0.6.0 - sayrhazi          ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
 ```
@@ -121,7 +121,7 @@ Sayrhazi/      # noyau : core, runtimes/opencode, engine, cli, tests, docs
 MonProjet/     # projet : code + .opencode/ + AGENTS.md
 ```
 
-Chaque projet possède sa propre copie de `.opencode/agent/` (`sayrhazi.yaml`, `workflow.yaml`, `opencode.json`, `watch-work.py`, `resume/`, `history/`, `features/`). `.opencode/workflow.yaml` décrit le parcours déclaratif (étapes, déclencheurs, conditions) ; seule la transition `build → Hadji` est automatique, le reste est orchestré par l'humain. Les rapports et historiques ne sont jamais partagés entre projets. Les agents ne supposent jamais le nom du projet : ils lisent `.opencode/sayrhazi.yaml`.
+Chaque projet possède sa propre copie de `.opencode/agent/` (`sayrhazi.yaml`, `workflow.yaml`, `opencode.json`, `watch-work.py`, `resume/`, `history/`, `features/`, `state/` local à ignorer par git). `.opencode/workflow.yaml` décrit le parcours déclaratif (étapes, déclencheurs, conditions) ; seule la transition `build → Hadji` est automatique, le reste est orchestré par l'humain. Les rapports et historiques ne sont jamais partagés entre projets. Les agents ne supposent jamais le nom du projet : ils lisent `.opencode/sayrhazi.yaml`.
 
 ## Installation dans un projet
 

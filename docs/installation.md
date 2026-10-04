@@ -37,7 +37,7 @@ chmod +x runtimes/opencode/scripts/install-sayrhazi.sh
 
 ## Ce que fait l'installation
 
-Le script crée `.opencode/agent/`, `resume/`, `history/` et `features/`, puis copie les six agents génériques et `watch-work.py` (mis à jour à chaque install). Il crée `AGENTS.md`, `sayrhazi.yaml` et `opencode.json` uniquement lorsqu'ils sont absents. Il ne supprime ni ne remplace les rapports, historiques, décisions ou configuration déjà présents.
+Le script crée `.opencode/agent/`, `resume/`, `history/`, `features/` et `state/`, puis copie les six agents génériques et `watch-work.py` (mis à jour à chaque install). `.opencode/state/` (`workflow-state.yaml`, vue de coordination du Lot 3) est local à la machine : ajoutez-le au `.gitignore` du projet (la config `workflow.yaml` se versionne, l'état non). Il crée `AGENTS.md`, `sayrhazi.yaml` et `opencode.json` uniquement lorsqu'ils sont absents. Il ne supprime ni ne remplace les rapports, historiques, décisions ou configuration déjà présents.
 
 Les fichiers d'agents sont les fichiers fournis par Sayrhazi et peuvent être actualisés par une future version. Pour un projet existant, effectuer un commit ou une sauvegarde avant toute mise à jour et relire les différences.
 

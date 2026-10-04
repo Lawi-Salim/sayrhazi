@@ -53,6 +53,18 @@ build.txt TERMINÉ + task_id → Hadji → vérifier review.txt
 
 Seule la transition `build.txt → Hadji` est automatisée. Hifadhui, Zawadi et le retour vers Bamse restent déclenchés manuellement : le moteur n'empêche pas toutes les transitions invalides, ce sont les contrats documentaires (rapports, statuts, `task_id`) qui les cadrent.
 
+## État persistant et reprise (Lot 3)
+
+Les terminaux ne sont pas la mémoire du workflow : `.opencode/state/workflow-state.yaml` est la vue de coordination (`task_id`, statut, étapes `current/completed/pending/blocked`, agents en cours). Les rapports restent les preuves détaillées. Le dossier `.opencode/state/` est local : à ignorer par git (reprise mono-poste, pas de bruit).
+
+Au redémarrage (ou à tout moment), réconcilier avant de reprendre :
+
+```powershell
+python engine/state.py --reconcile --project .
+```
+
+La réconciliation lit l'état, relit `workflow.yaml`, vérifie les rapports du `task_id` actif, ne retient que les étapes éligibles, ne relance jamais une étape terminée (sauf retour `CORRECTIONS NÉCESSAIRES` vers l'implémentation) et signale toute incohérence au lieu de la deviner. `tunda sayrhazi` contrôle la présence et la validité de l'état sans bloquer. Le watcher lira et écrira l'état au Lot 4.
+
 ## Watcher actuel (`runtimes/opencode/scripts/watch-work.py`, installé dans `.opencode/`)
 
 Le watcher surveille `.opencode/resume/build.txt` et lance Hadji uniquement si le rapport est complet : fichier stable (anti écriture en cours), `task_id` présent et `status: TERMINÉ`. Il refuse les statuts incomplets (`EN COURS`, `BLOQUÉ`, absent), empêche les doubles déclenchements (`task_id` + hash déjà traité en mémoire, plus `review.txt` existant pour le même `task_id` après redémarrage), applique un timeout et vérifie que `review.txt` mentionne le même `task_id`. Un nouveau `build.txt` de Bamse (plus récent que la revue, ex. après `CORRECTIONS NÉCESSAIRES`) relance légitimement la transition.
