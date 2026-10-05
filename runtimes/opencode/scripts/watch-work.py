@@ -1,11 +1,13 @@
 """
-watch-work.py — moteur de transitions Sayrhazi (Lot 4).
+watch-work.py — moteur de transitions Sayrhazi (Lots 4-6).
 
 Lit `.opencode/workflow.yaml` et déclenche, pour chaque étape `auto: true`,
 l'agent du rôle lorsque : le rapport déclencheur est stable, son `task_id`
 et son statut sont autorisés, la condition de l'étape est satisfaite, et le
-rapport de sortie ne couvre pas déjà ce `task_id`. Sans config valide, repli
-sur la transition historique : `build.txt TERMINÉ -> Hadji`.
+rapport de sortie ne couvre pas déjà ce `task_id`. Les étapes éligibles
+ensemble partent en parallèle (Lot 6, bornées par `max_parallel_agents`),
+avec convergence journalisée ; sans config valide, repli sur la transition
+historique : `build.txt TERMINÉ -> Hadji`.
 
 Garde-fous : verrou d'instance unique, anti-double en mémoire + sortie
 existante (survit au redémarrage, point 7 du contrat), minuteur visible,
@@ -24,6 +26,7 @@ Usage :
 """
 
 import argparse
+import concurrent.futures
 import hashlib
 import os
 import re
@@ -556,7 +559,7 @@ def write_state_minimal(project_root: Path, values: dict) -> bool:
 
 
 def note_state_running(project_root: Path, task_id: str, agent: Optional[str]) -> None:
-    """Signale un agent en cours (ou la fin si agent None)."""
+    """Signale un agent en cours (ou la fin si agent None). Chemin historique."""
     running = [agent] if agent else []
     values: dict = {"task_id": task_id, "status": "IN_PROGRESS", "running_agents": running}
     if agent is None:
@@ -565,6 +568,106 @@ def note_state_running(project_root: Path, task_id: str, agent: Optional[str]) -
             return
         values = {"running_agents": running}
     write_state_minimal(project_root, values)
+
+
+_SHARED_LOCK = threading.Lock()
+
+
+def state_agents_add(project_root: Path, task_id: str, agent: Optional[str]) -> None:
+    """Ajoute un agent aux running_agents (parallélisme, thread-safe)."""
+    if not agent:
+        return
+    with _SHARED_LOCK:
+        current = read_state_minimal(project_root)
+        items = current.get("running_agents")
+        running = items if isinstance(items, list) else _flow_items(items or "[]")
+        if agent not in running:
+            running.append(agent)
+        write_state_minimal(project_root, {"task_id": task_id, "status": "IN_PROGRESS",
+                                           "running_agents": running})
+
+
+def state_agents_remove(project_root: Path, task_id: str, agent: Optional[str]) -> None:
+    """Retire un agent des running_agents (parallélisme, thread-safe)."""
+    if not agent:
+        return
+    with _SHARED_LOCK:
+        current = read_state_minimal(project_root)
+        if current.get("task_id") != task_id:
+            return
+        items = current.get("running_agents")
+        running = items if isinstance(items, list) else _flow_items(items or "[]")
+        if agent in running:
+            running.remove(agent)
+        write_state_minimal(project_root, {"running_agents": running})
+
+
+def max_parallel_agents(config: Optional[dict]) -> int:
+    """Garde-fou machine (défaut 3)."""
+    try:
+        value = (config or {}).get("workflow", {}).get("max_parallel_agents", 3)
+    except AttributeError:
+        return 3
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        return 3
+    return value
+
+
+def _run_branch(project_root: Path, stage: dict, task_id: str) -> bool:
+    """Exécute une transition (journal + état + déclenchement)."""
+    sid = stage.get("id", "?")
+    journal(project_root, f"{sid} déclenchée pour {task_id}")
+    state_agents_add(project_root, task_id, stage.get("agent"))
+    try:
+        ok = trigger_stage(project_root, stage, task_id)
+    finally:
+        state_agents_remove(project_root, task_id, stage.get("agent"))
+    journal(project_root, f"{sid} {'terminée' if ok else 'échouée'} pour {task_id}")
+    return ok
+
+
+def run_branches(project_root: Path, items: list, workers: int) -> tuple:
+    """Exécute les transitions éligibles : séquentiel si 1, parallèle sinon.
+
+    items : [(cle, stage, task_id, raison), ...]. Retourne (ok_quelconque,
+    [clés réussies], [clés échouées]). Un échec n'empêche jamais les autres.
+    """
+    done: list = []
+    failed: list = []
+    if len(items) <= 1:
+        for key, stage, task_id, why in items:
+            log(f"État : {why}")
+            if _run_branch(project_root, stage, task_id):
+                done.append(key)
+            else:
+                failed.append(key)
+                log("Échec déclenchement, on réessaiera au prochain passage.")
+        return bool(done), done, failed
+    for _key, stage, task_id, why in items:
+        log(f"État : {why}")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, workers),
+                                               thread_name_prefix="sayrhazi") as pool:
+        futures = {pool.submit(_run_branch, project_root, stage, task_id): (key, stage.get("id", "?"))
+                   for key, stage, task_id, _why in items}
+        for future in concurrent.futures.as_completed(futures):
+            key, sid = futures[future]
+            try:
+                ok = future.result()
+            except Exception as exc:
+                log(f"État : {sid} erreur inattendue ({exc})")
+                journal(project_root, f"{sid} erreur inattendue ({exc})")
+                ok = False
+            if ok:
+                done.append(key)
+            else:
+                failed.append(key)
+                log("Échec déclenchement, on réessaiera au prochain passage.")
+    names = {key: stage.get("id", "?") for key, stage, _t, _w in items}
+    parts = ([f"{names[k]} OK" for k in sorted(done, key=names.get)]
+             + [f"{names[k]} ÉCHEC" for k in sorted(failed, key=names.get)])
+    log(f"Convergence : {', '.join(parts)} ({len(done)}/{len(items)})")
+    journal(project_root, f"convergence ({len(done)}/{len(items)}) : {', '.join(parts)}")
+    return bool(done), done, failed
 
 
 def check_opencode_available() -> bool:
@@ -744,7 +847,7 @@ def main() -> int:
             log(f"ATTENTION : {note}")
         log(f"Workflow : {len(usable)} étape(s) automatique(s) : "
             + ", ".join(s.get("id", "?") for s in usable))
-        return run_generic(root, args, usable)
+        return run_generic(root, args, config, usable)
     finally:
         release_lock(root)
 
@@ -759,7 +862,7 @@ def watched_reports(usable: list) -> list:
     return sorted(names)
 
 
-def run_generic(root: Path, args, usable: list) -> int:
+def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
     """Boucle moteur : toute transition déclarée et éligible est déclenchée."""
     watched = watched_reports(usable)
     log("Surveillance de : " + ", ".join(str(root / ".opencode" / "resume" / name) for name in watched))
@@ -796,25 +899,22 @@ def run_generic(root: Path, args, usable: list) -> int:
         conditions = read_conditions(root)
         found = eligible_transitions({"stages": usable}, triggers, conditions, outputs)
         log(f"État : {describe(triggers)}")
-        ok_any = False
+        todo = []
         for stage, task_id, why in found:
             trigger_report = (stage.get("trigger") or {}).get("report")
             key = f"{stage.get('id')}:{task_id}:{triggers.get(trigger_report, {}).get('hash')}"
             if key in last_keys:
                 log(f"État : {task_id} déjà déclenché pour {stage.get('id')}")
                 continue
-            log(f"État : {why}")
-            journal(root, f"{stage.get('id')} déclenchée pour {task_id}")
-            note_state_running(root, task_id, stage.get("agent"))
-            if trigger_stage(root, stage, task_id):
-                last_keys.add(key)
-                journal(root, f"{stage.get('id')} terminée pour {task_id}")
-                note_state_running(root, task_id, None)
-                log("En attente d'une autre tâche... (Ctrl+C pour arrêter)")
-                ok_any = True
-            else:
-                note_state_running(root, task_id, None)
-                log("Échec déclenchement, on réessaiera au prochain passage.")
+            todo.append((key, stage, task_id, why))
+        if not todo:
+            return False
+        workers = min(max_parallel_agents(config), len(todo))
+        ok_any, done_keys, _failed_keys = run_branches(root, todo, workers)
+        for key in done_keys:
+            last_keys.add(key)
+        if ok_any:
+            log("En attente d'une autre tâche... (Ctrl+C pour arrêter)")
         return ok_any
 
     def one_cycle() -> bool:
