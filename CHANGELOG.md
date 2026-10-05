@@ -1,5 +1,9 @@
 # Changelog Sayrhazi
 
+## 0.10.1 — 2026-10-05
+
+- Classification des échecs dans le watcher : quota/rate limit => messages explicites et aucun retry automatique (jamais de boucle de quota) ; réseau/timeout => retry avec backoff (30s, 90s, 270s, max 3) ; autres erreurs => échec normal journalisé. Message final explicite pour chaque catégorie.
+
 ## 0.10.0 — 2026-10-05
 
 - Lot 7 services séparés : règle serveurs dans les instructions (Bamse, Zawadi) — URL utilisée telle quelle, serveur absent = limite signalée, jamais de (re)démarrage ni kill de port. Nouveau `services.py` (`start/stop/restart/status/logs`, détaché multi-plateforme, santé HTTP, logs capturés, arrêt signalé, redémarrage jamais auto). Câblé à install/update/`tunda`. 4 nouveaux tests (`TestServices`, cycle réel sur `http.server`).

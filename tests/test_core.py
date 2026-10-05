@@ -510,7 +510,7 @@ class TestParallel(unittest.TestCase):
             _time.sleep(0.3)
             with lock:
                 current["n"] -= 1
-            return True
+            return True, "ok"
 
         w.trigger_stage = stub
         items = [(f"k{i}", s, "T", f"{s['id']} prêt (T)") for i, s in enumerate(self._stages())]
@@ -544,7 +544,9 @@ class TestParallel(unittest.TestCase):
             _time.sleep(0.1)
             with lock:
                 current["n"] -= 1
-            return stage["id"] != "security"
+            if stage["id"] != "security":
+                return True, "ok"
+            return False, "other"
 
         w.trigger_stage = stub
         items = [(f"k{i}", s, "T", f"{s['id']} prêt (T)") for i, s in enumerate(self._stages())]
@@ -587,6 +589,30 @@ class TestParallel(unittest.TestCase):
         self.assertEqual(w.max_parallel_agents({"workflow": {"max_parallel_agents": True}}), 3)
         self.assertEqual(w.max_parallel_agents({}), 3)
         self.assertEqual(w.max_parallel_agents(None), 3)
+
+    def test_classification_echecs(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "watch_work_c", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        w = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(w)
+
+        class R:
+            stdout = ""
+            stderr = ""
+
+        r = R()
+        r.stderr = "Error from provider: Rate limit exceeded. Please try again later."
+        self.assertEqual(w.classify_failure(r), "quota")
+        r.stderr = "429 Too Many Requests: insufficient_quota"
+        self.assertEqual(w.classify_failure(r), "quota")
+        r.stderr = ""
+        r.stdout = "Connection reset by peer, network unreachable"
+        self.assertEqual(w.classify_failure(r), "network")
+        r.stdout, r.stderr = "", "timed out while waiting for the model"
+        self.assertEqual(w.classify_failure(r), "network")
+        r.stdout, r.stderr = "Unknown error from agent", ""
+        self.assertEqual(w.classify_failure(r), "other")
 
 
 class TestServices(unittest.TestCase):
