@@ -613,17 +613,31 @@ def max_parallel_agents(config: Optional[dict]) -> int:
     return value
 
 
-def _run_branch(project_root: Path, stage: dict, task_id: str) -> bool:
-    """Exécute une transition (journal + état + déclenchement)."""
+def classify_failure(result) -> str:
+    """Classe une réponse d'erreur d'opencode : quota | timeout | network | other."""
+    text = (str(getattr(result, "stdout", "") or "") + " "
+            + str(getattr(result, "stderr", "") or "")).lower()
+    lower = text
+    for marker in ("rate limit", "quota", "429", "resource_exhausted", "insufficient_quota"):
+        if marker in lower:
+            return "quota"
+    for marker in ("timed out", "timeout", "econn", "enotfound", "unreachable", "network"):
+        if marker in lower:
+            return "network"
+    return "other"
+
+
+def _run_branch(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, str]:
+    """Exécute une transition (journal + état + déclenchement). (ok, kind)."""
     sid = stage.get("id", "?")
     journal(project_root, f"{sid} déclenchée pour {task_id}")
     state_agents_add(project_root, task_id, stage.get("agent"))
     try:
-        ok = trigger_stage(project_root, stage, task_id)
+        ok, kind = trigger_stage(project_root, stage, task_id)
     finally:
         state_agents_remove(project_root, task_id, stage.get("agent"))
     journal(project_root, f"{sid} {'terminée' if ok else 'échouée'} pour {task_id}")
-    return ok
+    return ok, kind
 
 
 def run_branches(project_root: Path, items: list, workers: int) -> tuple:
@@ -637,10 +651,11 @@ def run_branches(project_root: Path, items: list, workers: int) -> tuple:
     if len(items) <= 1:
         for key, stage, task_id, why in items:
             log(f"État : {why}")
-            if _run_branch(project_root, stage, task_id):
+            ok, kind = _run_branch(project_root, stage, task_id)
+            if ok:
                 done.append(key)
             else:
-                failed.append(key)
+                failed.append((key, stage.get("id", "?"), kind))
                 log("Échec déclenchement, on réessaiera au prochain passage.")
         return bool(done), done, failed
     for _key, stage, task_id, why in items:
@@ -652,19 +667,21 @@ def run_branches(project_root: Path, items: list, workers: int) -> tuple:
         for future in concurrent.futures.as_completed(futures):
             key, sid = futures[future]
             try:
-                ok = future.result()
+                ok, kind = future.result()
             except Exception as exc:
                 log(f"État : {sid} erreur inattendue ({exc})")
                 journal(project_root, f"{sid} erreur inattendue ({exc})")
-                ok = False
+                ok, kind = False, "other"
             if ok:
                 done.append(key)
             else:
-                failed.append(key)
+                failed.append((key, sid, kind))
                 log("Échec déclenchement, on réessaiera au prochain passage.")
     names = {key: stage.get("id", "?") for key, stage, _t, _w in items}
+    kinds = {key: kind for key, _sid, kind in failed}
     parts = ([f"{names[k]} OK" for k in sorted(done, key=names.get)]
-             + [f"{names[k]} ÉCHEC" for k in sorted(failed, key=names.get)])
+             + [f"{names[k]} ÉCHEC" + (f" ({kinds[k]})" if kinds.get(k) not in (None, 'other') else "")
+                for k in sorted([f for f, _s, _k in failed], key=names.get)])
     log(f"Convergence : {', '.join(parts)} ({len(done)}/{len(items)})")
     journal(project_root, f"convergence ({len(done)}/{len(items)}) : {', '.join(parts)}")
     return bool(done), done, failed
@@ -684,8 +701,8 @@ def check_opencode_available() -> bool:
         return False
 
 
-def trigger_stage(project_root: Path, stage: dict, task_id: str) -> bool:
-    """Déclenche l'agent d'une étape et vérifie son rapport de sortie."""
+def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, str]:
+    """Déclenche l'agent d'une étape et vérifie son rapport de sortie. (ok, kind)."""
     agent = (stage.get("agent") or "").strip().lower()
     agent_file = ROLE_AGENT_FILE.get(agent, agent or AGENT_TO_TRIGGER)
     output_report = ROLE_REPORT.get(agent, "")
@@ -711,13 +728,13 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> bool:
             result = subprocess.run(["opencode", "run", "--agent", agent_file, prompt], cwd=str(project_root), capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
     except FileNotFoundError:
         log("ERREUR : commande 'opencode' introuvable.")
-        return False
+        return False, "opencode_missing"
     except subprocess.TimeoutExpired:
         log(f"ERREUR : timeout 600s sur appel {agent_file} ({task_id}, {format_duration(time.time() - start)} ecoulees).")
-        return False
+        return False, "timeout"
     except Exception as exc:
         log(f"ERREUR inattendue : {exc}")
-        return False
+        return False, "other"
     finally:
         stop_tick.set()
         ticker.join()
@@ -727,31 +744,32 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> bool:
         log(f"opencode erreur {result.returncode} :")
         if result.stderr:
             print(result.stderr)
-        return False
+        return False, classify_failure(result)
     log(f"{agent_file} terminé pour {task_id} en {format_duration(time.time() - start)}.")
     if not output_report:
-        return True
+        return True, "ok"
     output = project_root / ".opencode" / "resume" / output_report
     if not output.is_file():
         log(f"ATTENTION : {output_report} absent après déclenchement. Vérifie la session {agent_file}.")
-        return False
+        return False, "other"
     try:
         text = output.read_text(encoding="utf-8", errors="replace")
     except OSError as exc:
         log(f"ATTENTION : {output_report} illisible ({exc}).")
-        return False
+        return False, "other"
     if task_id not in text:
         log(f"ATTENTION : {output_report} ne mentionne pas {task_id}.")
-        return False
+        return False, "other"
     log(f"{output_report} vérifié pour {task_id}.")
-    return True
+    return True, "ok"
 
 
 def trigger_agent(project_root: Path, task_id: str) -> bool:
     """Chemin historique build.txt TERMINÉ -> Hadji (repli sans config)."""
-    return trigger_stage(project_root, {"id": "review", "agent": "reviewer",
-                                        "trigger": {"report": "build.txt", "status": "TERMINÉ"}},
-                         task_id)
+    ok, _kind = trigger_stage(project_root, {"id": "review", "agent": "reviewer",
+                                             "trigger": {"report": "build.txt", "status": "TERMINÉ"}},
+                              task_id)
+    return ok
 
 
 def should_trigger(build_file: Path, last_trigger: str) -> Tuple[bool, str, Optional[str]]:
@@ -869,7 +887,14 @@ def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
     resume = root / ".opencode" / "resume"
     last_keys: set = set()
     last_hashes: dict = {}
+    attempts: dict = {}
+    retry_due: dict = {}
+    quota_blocked: set = set()
+    exhausted: set = set()
     start = time.time()
+
+    MAX_ATTEMPTS = 3
+    BACKOFF = (30, 90, 270)
 
     def snapshot() -> Tuple[dict, dict]:
         triggers: dict = {}
@@ -906,13 +931,37 @@ def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
             if key in last_keys:
                 log(f"État : {task_id} déjà déclenché pour {stage.get('id')}")
                 continue
+            if key in quota_blocked:
+                log(f"État : {stage.get('agent')} bloqué quota (voir ci-dessus), pas de relance auto")
+                continue
+            if key in exhausted:
+                continue
             todo.append((key, stage, task_id, why))
         if not todo:
             return False
         workers = min(max_parallel_agents(config), len(todo))
-        ok_any, done_keys, _failed_keys = run_branches(root, todo, workers)
+        ok_any, done_keys, failed_keys = run_branches(root, todo, workers)
         for key in done_keys:
             last_keys.add(key)
+            attempts.pop(key, None)
+            retry_due.pop(key, None)
+            exhausted.discard(key)
+        for key, sid, kind in failed_keys:
+            attempts[key] = attempts.get(key, 0) + 1
+            if kind in ("timeout", "network") and attempts[key] < MAX_ATTEMPTS:
+                delay = BACKOFF[min(attempts[key] - 1, len(BACKOFF) - 1)]
+                retry_due[key] = time.time() + delay
+                log(f"{sid} : erreur réseau/timeout. Nouvelle tentative dans {delay}s ({attempts[key]}/{MAX_ATTEMPTS})...")
+            elif kind in ("timeout", "network"):
+                exhausted.add(key)
+                log(f"{sid} : 3 tentatives épuisées, échec normal pour cette version.")
+            elif kind == "quota":
+                quota_blocked.add(key)
+                log(f"{sid} : échec — quota/rate limit du provider atteint.")
+                log("Aucun retry automatique pour éviter une boucle sur le quota.")
+                log("Réessayez plus tard ou relancez le watcher.")
+            else:
+                log(f"{sid} : échec normal ({kind}), journalisé.")
         if ok_any:
             log("En attente d'une autre tâche... (Ctrl+C pour arrêter)")
         return ok_any
@@ -935,7 +984,9 @@ def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
                 last_hashes[name] = stable
                 changed = True
         if not changed:
-            return False
+            due = any(key in retry_due and retry_due[key] <= time.time() for key in retry_due)
+            if not due:
+                return False
         return evaluate()
 
     if args.once:
