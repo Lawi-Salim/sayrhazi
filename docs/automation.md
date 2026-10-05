@@ -73,6 +73,10 @@ Les conditions se résolvent depuis `sayrhazi.yaml` (`visual_qa_required` → Za
 
 Les étapes éligibles ensemble partent en parallèle (Lot 6, threads stdlib), bornées par `workflow.max_parallel_agents` (défaut 3, garde-fou machine). La convergence est journalisée (`Convergence : review OK, security OK (2/2)`) : un échec (timeout, erreur) n'empêche jamais les autres branches, qui écrivent chacune leur rapport ; la branche échouée sera réévaluée au prochain changement. `running_agents` reflète l'ensemble en cours. Séquentiel si une seule étape éligible, repli historique sinon.
 
+## Services séparés (Lot 7)
+
+Les agents produisent des rapports ; les serveurs (`yarn dev` × 2) sont des processus persistants du projet, gérés par `runtimes/opencode/scripts/services.py` (installé dans `.opencode/`, jamais mélangé au moteur) : `start` (refusé si port occupé), `stop` (arbre complet), `status`, `logs`, `restart` explicite uniquement. Santé vérifiée par HTTP, logs vers `history/services-<nom>.log`, PID dans `state/`. Redémarrage jamais automatique : un arrêt peut être volontaire. Les agents utilisent `runtime.local_url` tel quel et ne (re)démarrent ni ne tuent jamais un serveur : un serveur absent est une limite signalée, pas une action.
+
 Modes utiles : `--check` (valide la config sans surveiller), `--once` (une seule vérification, exit `0` si déclenché), `--timeout SEC`.
 
 ## Limites connues

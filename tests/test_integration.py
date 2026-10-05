@@ -35,6 +35,7 @@ class TestIntegration(unittest.TestCase):
             install_project(project, ROOT)
             self.assertTrue((project / ".opencode" / "agent" / "bamse.md").is_file())
             self.assertTrue((project / ".opencode" / "watch-work.py").is_file())
+            self.assertTrue((project / ".opencode" / "services.py").is_file())
             self.assertEqual(len(list((project / ".opencode" / "agent").glob("*.md"))), 6)
             # tunda-equivalent : cles presentes ?
             text = (project / ".opencode" / "sayrhazi.yaml").read_text(encoding="utf-8")

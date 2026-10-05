@@ -39,6 +39,10 @@ def install_project(project: Path, core: Path) -> None:
     if watcher.is_file():
         shutil.copy2(watcher, opencode / "watch-work.py")
 
+    services = core / "runtimes" / "opencode" / "scripts" / "services.py"
+    if services.is_file():
+        shutil.copy2(services, opencode / "services.py")
+
     readme = project / "SAYRHAZI-README.md"
     if not readme.is_file():
         readme.write_text(

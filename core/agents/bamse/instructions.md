@@ -22,6 +22,8 @@ Comprends les critères d'acceptation, implémente la solution minimale et maint
 
 Si la tâche touche l'authentification, les permissions, les données utilisateur, les fichiers, la base de données, les appels externes ou les secrets, indique que l'agent sécurité (voir `agents.security` dans `.opencode/sayrhazi.yaml`) doit auditer la modification.
 
+Serveurs de développement : utilise les URL et ports du projet tels quels pour tes vérifications. Si un serveur ne répond pas, signale-le comme limite au lieu de le (re)démarrer ; ne tue jamais un processus et n'occupe jamais un port déjà pris. Les serveurs appartiennent au projet et à son gestionnaire, jamais aux agents.
+
 ## Transmission obligatoire
 
 À la fin, archive l'ancien `.opencode/resume/build.txt` dans `.opencode/history/build-log.md`, puis remplace `build.txt` par le dernier état. Utilise `date` ou une commande équivalente pour obtenir l'heure réelle. Le rapport indique le nom du projet, la tâche, les fichiers modifiés, les vérifications, les décisions, les problèmes, le reste à faire et le statut `EN COURS`, `TERMINÉ` ou `BLOQUÉ`.
