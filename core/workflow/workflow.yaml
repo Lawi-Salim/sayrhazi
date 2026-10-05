@@ -4,8 +4,8 @@
 # stables (architect, designer, builder, reviewer, security, qa), jamais des
 # noms d'affichage. Validateur : engine/workflow.py. Modèle projet :
 # runtimes/opencode/templates/workflow.yaml.
-# Seule la transition review est automatique aujourd'hui (watch-work.py) ;
-# les autres le deviendront aux Lots 4-5. `auto: false` = orchestration humaine.
+# Sont automatiques : review (toujours), security et visual_qa (si requis),
+# rework (retour vers builder sur CORRECTIONS). `auto: false` = humain.
 workflow:
   mode: supervised
   auto_start: false
@@ -40,7 +40,7 @@ stages:
     trigger:
       report: build.txt
       status: TERMINÉ
-    auto: false
+    auto: true
 
   - id: visual_qa
     agent: qa
@@ -48,4 +48,11 @@ stages:
     trigger:
       report: build.txt
       status: TERMINÉ
-    auto: false
+    auto: true
+
+  - id: rework
+    agent: builder
+    trigger:
+      report: review.txt
+      status: CORRECTIONS NÉCESSAIRES
+    auto: true

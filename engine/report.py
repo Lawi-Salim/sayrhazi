@@ -90,7 +90,9 @@ def parse_report(text: str) -> dict:
 
     Titres `#`, lignes libres et puces hors cle ignores. Premiere occurrence gagne
     (le corps du rapport peut rementionner un champ). Cles en minuscules.
+    Le BOM UTF-8 (éditeurs Windows) est ignoré.
     """
+    text = text.lstrip("\ufeff")
     data: dict = {}
     pending_key: str | None = None
     for raw in text.splitlines():

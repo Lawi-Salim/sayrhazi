@@ -57,6 +57,7 @@ def _scalar(raw: str):
 
 def parse_simple_yaml(text: str) -> tuple[dict | None, str | None]:
     """Retourne (donnees, None) ou (None, message_erreur)."""
+    text = text.lstrip("\ufeff")
     root: dict = {}
     stack: list[tuple[int, dict]] = [(-1, root)]
     for lineno, raw in enumerate(text.splitlines(), 1):

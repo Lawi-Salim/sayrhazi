@@ -32,7 +32,7 @@ try:
 except ImportError:
     HAS_REPORT_CHECK = False
 try:
-    from workflow import parse_workflow, validate_workflow
+    from workflow import parse_workflow, summarize_agents, validate_workflow
     HAS_WORKFLOW_CHECK = True
 except ImportError:
     HAS_WORKFLOW_CHECK = False
@@ -268,6 +268,29 @@ def main() -> int:
                 if not violations:
                     stages = wdata.get("stages", [])
                     ok(f"workflow.yaml conforme ({len(stages)} étapes)")
+
+    # 11. agents requis (Lot 5 : informatif seulement, jamais bloquant)
+    if HAS_WORKFLOW_CHECK:
+        wf = opencode / "workflow.yaml"
+        if wf.is_file():
+            try:
+                wdata, werr = parse_workflow(wf.read_text(encoding="utf-8", errors="replace"))
+            except OSError:
+                wdata, werr = None, "illisible"
+            if not werr and wdata:
+                conditions: dict = {}
+                try:
+                    cfg_text = config.read_text(encoding="utf-8", errors="replace")
+                except (OSError, NameError):
+                    cfg_text = ""
+                for condition, key in (("security_required", "security_audit_required_by_default"),
+                                       ("visual_qa_required", "visual_qa_required"),
+                                       ("design_required", "design_required")):
+                    m = re.search(r"^\s*" + re.escape(key) + r"\s*:\s*(\S+)", cfg_text,
+                                  re.MULTILINE | re.IGNORECASE)
+                    conditions[condition] = bool(m) and m.group(1).strip().lower() == "true"
+                for sid, agent, state in summarize_agents(wdata, conditions):
+                    print(f"  {sid} -> {agent} : {state}")
 
     # 7. version installee vs noyau (invitation seulement, jamais bloquant)
     installed = _read_workflow_version(config) if config.is_file() else None

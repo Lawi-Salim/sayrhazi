@@ -121,7 +121,7 @@ def file_hash(path: Path) -> Optional[str]:
 def parse_build_report(path: Path) -> Tuple[Optional[str], Optional[str]]:
     """Extrait (task_id, status) depuis build.txt. Retourne (None, None) si absent."""
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = path.read_text(encoding="utf-8", errors="replace").lstrip(chr(0xFEFF))
     except FileNotFoundError:
         return None, None
     except OSError as exc:
@@ -174,7 +174,7 @@ def parse_workflow_minimal(path: Path) -> Tuple[Optional[dict], Optional[str]]:
     if not path.is_file():
         return None, "absent"
     try:
-        raw_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        raw_lines = path.read_text(encoding="utf-8", errors="replace").lstrip(chr(0xFEFF)).splitlines()
     except OSError as exc:
         return None, f"illisible : {exc}"
     items: list[tuple[int, int, str]] = []
@@ -331,7 +331,7 @@ def eligible_transitions(config: dict, triggers: dict, conditions: dict, outputs
 def parse_report_file(path: Path) -> Tuple[Optional[str], Optional[str], Optional[float]]:
     """(task_id, status, mtime) d'un rapport, ou (None, None, None)."""
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        text = path.read_text(encoding="utf-8", errors="replace").lstrip(chr(0xFEFF))
         mtime = path.stat().st_mtime
     except OSError:
         return None, None, None
@@ -374,11 +374,65 @@ def lock_path(project_root: Path) -> Path:
     return project_root / ".opencode" / "state" / "watcher.lock"
 
 
+def lock_holder_pid(project_root: Path) -> Optional[int]:
+    """PID inscrit dans le verrou, ou None si illisible."""
+    try:
+        content = lock_path(project_root).read_text(encoding="utf-8", errors="replace").strip()
+        return int(content.split()[0])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _pid_alive(pid: int) -> bool:
+    """Processus vivant ? Sans os.kill (bloquant sur Windows si mort)."""
+    if IS_WINDOWS:
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.OpenProcess(0x00100000, False, pid)
+            if not handle:
+                return False
+            kernel32.CloseHandle(handle)
+            return True
+        except Exception:
+            return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def holder_alive(project_root: Path) -> bool:
+    """Le détenteur du verrou respire-t-il encore ? (anti-purge abusive)."""
+    pid = lock_holder_pid(project_root)
+    if pid is None:
+        return False
+    return _pid_alive(pid)
+
+
+def touch_lock(project_root: Path) -> None:
+    """Heartbeat : prouve qu'on est vivant (verrou jamais périmé à tort)."""
+    try:
+        if lock_holder_pid(project_root) == os.getpid():
+            os.utime(str(lock_path(project_root)), None)
+    except OSError:
+        pass
+
+
 def acquire_lock(project_root: Path) -> bool:
-    """Verrou d'instance unique (reste périmé après 10 min)."""
+    """Verrou d'instance unique.
+
+    Un verrou périmé (10 min) n'est purgé que si son détenteur est mort :
+    un run Hadji de plus de 10 min reste protégé (heartbeat + PID vivant).
+    """
     path = lock_path(project_root)
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        os.makedirs(str(path.parent), exist_ok=True)
     except OSError:
         return True
     for _ in range(2):
@@ -394,7 +448,7 @@ def acquire_lock(project_root: Path) -> bool:
                 age = time.time() - path.stat().st_mtime
             except OSError:
                 return False
-            if age >= LOCK_STALE_SECONDS:
+            if age >= LOCK_STALE_SECONDS and not holder_alive(project_root):
                 try:
                     path.unlink()
                 except OSError:
@@ -407,17 +461,19 @@ def acquire_lock(project_root: Path) -> bool:
 
 
 def release_lock(project_root: Path) -> None:
-    try:
-        lock_path(project_root).unlink()
-    except OSError:
-        pass
+    """Ne libère que SON verrou (jamais celui d'une instance plus récente)."""
+    if lock_holder_pid(project_root) == os.getpid():
+        try:
+            lock_path(project_root).unlink()
+        except OSError:
+            pass
 
 
 def journal(project_root: Path, message: str) -> None:
     """Archive un événement dans history/workflow-log.md."""
     try:
         history = project_root / ".opencode" / "history" / "workflow-log.md"
-        history.parent.mkdir(parents=True, exist_ok=True)
+        os.makedirs(str(history.parent), exist_ok=True)
         with open(history, "a", encoding="utf-8") as fh:
             fh.write(f"- [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
     except OSError as exc:
@@ -475,7 +531,7 @@ def write_state_minimal(project_root: Path, values: dict) -> bool:
     """
     path = project_root / ".opencode" / "state" / "workflow-state.yaml"
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        os.makedirs(str(path.parent), exist_ok=True)
     except OSError:
         return False
     merged = read_state_minimal(project_root)
@@ -539,6 +595,7 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> bool:
 
     def tick() -> None:
         while not stop_tick.wait(TICK_SECONDS):
+            touch_lock(project_root)
             log(f"{agent_file} en cours... {format_duration(time.time() - start)} ecoulees ({task_id})")
 
     ticker = threading.Thread(target=tick, daemon=True)
@@ -670,7 +727,11 @@ def main() -> int:
         return 2
 
     if not acquire_lock(root):
-        log("Une instance tourne déjà (verrou .opencode/state/watcher.lock). Arrêt.")
+        holder = lock_holder_pid(root)
+        if holder is not None:
+            log(f"Une instance tourne déjà (PID {holder}, verrou .opencode/state/watcher.lock). Arrêt.")
+        else:
+            log("Une instance tourne déjà (verrou .opencode/state/watcher.lock). Arrêt.")
         return 1
     try:
         config, werr = parse_workflow_minimal(root / ".opencode" / "workflow.yaml")
@@ -781,12 +842,16 @@ def run_generic(root: Path, args, usable: list) -> int:
         return 0 if one_cycle() else 1
 
     log("En attente... (Ctrl+C pour arrêter)")
+    last_touch = start
     try:
         while True:
             if args.timeout and (time.time() - start) > args.timeout:
                 log("Timeout atteint, arrêt.")
                 return 1
             one_cycle()
+            if time.time() - last_touch >= 60:
+                touch_lock(root)
+                last_touch = time.time()
             time.sleep(POLL_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         log("Arrêt (Ctrl+C).")
@@ -797,6 +862,7 @@ def run_legacy(root: Path, args, build_file: Path) -> int:
     """Chemin historique build.txt TERMINÉ -> Hadji (sans config)."""
     log(f"Surveillance de : {build_file}")
     last_trigger = ""
+    last_touch = time.time()
     start = time.time()
 
     def one_pass() -> bool:
@@ -825,6 +891,9 @@ def run_legacy(root: Path, args, build_file: Path) -> int:
                 last_hash_seen = current
                 if one_pass():
                     log("En attente d'une autre tâche... (Ctrl+C pour arrêter)")
+            if time.time() - last_touch >= 60:
+                touch_lock(root)
+                last_touch = time.time()
             time.sleep(POLL_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         log("Arrêt (Ctrl+C).")
