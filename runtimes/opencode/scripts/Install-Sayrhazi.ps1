@@ -59,6 +59,12 @@ if (Test-Path -LiteralPath $watcherSource) {
     Copy-Item $watcherSource (Join-Path $opencode 'watch-work.py') -Force
 }
 
+# Le gestionnaire de services aussi (séparé du moteur d'agents).
+$servicesSource = Join-Path $adapterRoot 'scripts/services.py'
+if (Test-Path -LiteralPath $servicesSource) {
+    Copy-Item $servicesSource (Join-Path $opencode 'services.py') -Force
+}
+
 $readme = Join-Path $resolvedProject 'SAYRHAZI-README.md'
 if (-not (Test-Path -LiteralPath $readme)) {
     @"

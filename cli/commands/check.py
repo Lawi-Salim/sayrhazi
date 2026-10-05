@@ -208,6 +208,12 @@ def main() -> int:
     else:
         warn("watch-work.py absent (relance Sayrhazi-Install pour l'ajouter)")
 
+    # 6b. gestionnaire de services (recommande, non bloquant strict)
+    if (opencode / "services.py").is_file():
+        ok("services.py present")
+    else:
+        warn("services.py absent (lance `update sayrhazi` pour l'ajouter)")
+
     # 8. rapports (contrat Lot 1 : informatif seulement, jamais bloquant)
     if HAS_REPORT_CHECK:
         checked = 0

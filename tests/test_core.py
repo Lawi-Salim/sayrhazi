@@ -589,6 +589,87 @@ class TestParallel(unittest.TestCase):
         self.assertEqual(w.max_parallel_agents(None), 3)
 
 
+class TestServices(unittest.TestCase):
+    @classmethod
+    def _services(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "services_mod", str(ROOT / "runtimes" / "opencode" / "scripts" / "services.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    @staticmethod
+    def _free_port():
+        import socket
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            return sock.getsockname()[1]
+
+    def test_cycle_complet(self):
+        import sys
+        import tempfile
+        from pathlib import Path as _Path
+        svc = self._services()
+        tmp = _Path(tempfile.mkdtemp())
+        (_opencode := tmp / ".opencode").mkdir()
+        (_opencode / "sayrhazi.yaml").write_text("workflow:\n  name: Sayrhazi\n", encoding="utf-8")
+        port = self._free_port()
+        url = f"http://localhost:{port}/"
+        ok, message = svc.start_service(tmp, "web", f"{sys.executable} -m http.server {port}",
+                                        ".", port, url, wait=15)
+        self.assertTrue(ok, message)
+        rows = svc.service_status(tmp, "web")
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["alive"])
+        self.assertTrue(rows[0]["port_busy"])
+        text, err = svc.tail_logs(tmp, "web")
+        self.assertEqual(err, "")
+        self.assertTrue(text.strip())
+        ok, message = svc.stop_service(tmp, "web")
+        self.assertTrue(ok, message)
+        self.assertFalse(svc.port_busy(port))
+        self.assertFalse((tmp / ".opencode" / "state" / "services-web.pid").is_file())
+
+    def test_port_occupe_refuse(self):
+        import socket
+        import tempfile
+        from pathlib import Path as _Path
+        svc = self._services()
+        tmp = _Path(tempfile.mkdtemp())
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        sock.listen(1)
+        port = sock.getsockname()[1]
+        try:
+            ok, message = svc.start_service(tmp, "web", "dummy", ".", port, None, wait=1)
+            self.assertFalse(ok)
+            self.assertIn("occupé", message)
+        finally:
+            sock.close()
+
+    def test_pidfile_perime(self):
+        import tempfile
+        from pathlib import Path as _Path
+        svc = self._services()
+        tmp = _Path(tempfile.mkdtemp())
+        state = tmp / ".opencode" / "state"
+        state.mkdir(parents=True)
+        import json
+        (state / "services-web.pid").write_text(
+            json.dumps({"pid": 2147483647, "port": None}), encoding="utf-8")
+        rows = svc.service_status(tmp, "web")
+        self.assertFalse(rows[0]["alive"])
+        ok, _ = svc.stop_service(tmp, "web")
+        self.assertTrue(ok)
+        self.assertFalse((state / "services-web.pid").is_file())
+
+    def test_regle_serveurs_instructions(self):
+        for agent in ("bamse", "zawadi"):
+            body = (ROOT / "core" / "agents" / agent / "instructions.md").read_text(encoding="utf-8")
+            self.assertIn("ne tue jamais un processus", body, agent)
+
+
 class TestState(unittest.TestCase):
     def test_roundtrip(self):
         from state import default_state, load_state, save_state

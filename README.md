@@ -10,7 +10,7 @@
 ║    \___ \ / _` | | | | '__| '_ \ / _` |_  / | |   ║
 ║     ___) | (_| | |_| | |  | | | | (_| |/ /__| |   ║
 ║    |____/ \__,_|\__, |_|  |_| |_|\__,_/_____|_|   ║
-║                 |___/  v0.9.0 - sayrhazi          ║
+║                 |___/  v0.10.0 - sayrhazi          ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
 ```
@@ -171,7 +171,7 @@ Le `deny` global empêche les autres agents d'y accéder ; seuls `ali.md` (obser
 
 ## Automatisation
 
-Le cœur fonctionne manuellement ; `watch-work.py` (installé dans `.opencode/`) est un moteur piloté par `.opencode/workflow.yaml` : chaque étape `auto: true` déclenche l'agent du rôle si rapport, statut, condition et sortie le permettent (`review` toujours, `security`/`visual_qa` si requis, `rework` vers Bamse sur corrections ; Ali manuel). Les étapes éligibles ensemble partent en parallèle (bornées par `max_parallel_agents`), convergence journalisée, échec isolé. `tunda` affiche les agents requis par la configuration. Le reste du flux (Lawibrahim → Ali → Bamse → Hadji → Hifadhui → Zawadi) est prescrit mais orchestré par l'humain. Il refuse les rapports incomplets (contrat `task_id` + `agent` + `status` + `completed_at`, voir `docs/reports.md`), empêche les doubles déclenchements et applique un timeout. `tunda` signale les rapports non conformes sans bloquer. Pas de retour auto vers Bamse, pas de boucle après review négative : les décisions restent humaines.
+Le cœur fonctionne manuellement ; `watch-work.py` (installé dans `.opencode/`) est un moteur piloté par `.opencode/workflow.yaml` : chaque étape `auto: true` déclenche l'agent du rôle si rapport, statut, condition et sortie le permettent (`review` toujours, `security`/`visual_qa` si requis, `rework` vers Bamse sur corrections ; Ali manuel). Les étapes éligibles ensemble partent en parallèle (bornées par `max_parallel_agents`), convergence journalisée, échec isolé. Les serveurs (`yarn dev`) vivent hors des agents via `services.py` (`start/stop/status/logs`) : les agents utilisent l'URL sans jamais la gérer. `tunda` affiche les agents requis par la configuration. Le reste du flux (Lawibrahim → Ali → Bamse → Hadji → Hifadhui → Zawadi) est prescrit mais orchestré par l'humain. Il refuse les rapports incomplets (contrat `task_id` + `agent` + `status` + `completed_at`, voir `docs/reports.md`), empêche les doubles déclenchements et applique un timeout. `tunda` signale les rapports non conformes sans bloquer. Pas de retour auto vers Bamse, pas de boucle après review négative : les décisions restent humaines.
 
 Limites connues : permissions en mode headless, fichiers créés hors projet (Bamse doit travailler dans le projet), sessions longues interrompues.
 

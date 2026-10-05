@@ -1,5 +1,9 @@
 # Changelog Sayrhazi
 
+## 0.10.0 — 2026-10-05
+
+- Lot 7 services séparés : règle serveurs dans les instructions (Bamse, Zawadi) — URL utilisée telle quelle, serveur absent = limite signalée, jamais de (re)démarrage ni kill de port. Nouveau `services.py` (`start/stop/restart/status/logs`, détaché multi-plateforme, santé HTTP, logs capturés, arrêt signalé, redémarrage jamais auto). Câblé à install/update/`tunda`. 4 nouveaux tests (`TestServices`, cycle réel sur `http.server`).
+
 ## 0.9.0 — 2026-10-05
 
 - Lot 6 parallélisme : étapes éligibles ensemble lancées en parallèle (`ThreadPoolExecutor` stdlib), bornées par `workflow.max_parallel_agents` (défaut 3, garde-fou machine), convergence journalisée (`Convergence : … (n/n)`), échec d'une branche isolé (les autres continuent, réévaluation au prochain changement). `running_agents` add/remove thread-safe, séquentiel si une seule étape, repli historique inchangé. 4 nouveaux tests (`TestParallel`, déclencheurs simulés).

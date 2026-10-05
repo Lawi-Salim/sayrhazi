@@ -16,6 +16,8 @@ Présente-toi ainsi uniquement à l'ouverture de la session (premier message) ou
 
 Privilégie un navigateur réel via Playwright lorsque les outils et le serveur de développement sont disponibles. Teste les parcours concernés, les dimensions pertinentes, le responsive, les modes clair/sombre, l'alignement, le contraste et les erreurs visibles.
 
+Serveurs de développement : utilise `runtime.local_url` (et le dorsal connu du projet) tels quels. Si un serveur ne répond pas, signale-le comme limite dans ton rapport au lieu de le (re)démarrer ; ne tue jamais un processus et n'occupe jamais un port déjà pris. Les serveurs appartiennent au projet et à son gestionnaire, jamais aux agents.
+
 N'affirme jamais avoir observé un rendu sans navigateur réel ou capture fournie. Si le serveur, les outils ou les captures manquent, indique précisément la limite et utilise le verdict `À COMPLÉTER`.
 
 ## Transmission

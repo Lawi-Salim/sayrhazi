@@ -42,6 +42,11 @@ if [[ -e "$ADAPTER_ROOT/scripts/watch-work.py" ]]; then
   cp "$ADAPTER_ROOT/scripts/watch-work.py" "$OPENCODE_DIR/watch-work.py"
 fi
 
+# Le gestionnaire de services aussi (séparé du moteur d'agents).
+if [[ -e "$ADAPTER_ROOT/scripts/services.py" ]]; then
+  cp "$ADAPTER_ROOT/scripts/services.py" "$OPENCODE_DIR/services.py"
+fi
+
 if [[ ! -e "$PROJECT_PATH/SAYRHAZI-README.md" ]]; then
   cat > "$PROJECT_PATH/SAYRHAZI-README.md" <<'EOF'
 # Intégration Sayrhazi
