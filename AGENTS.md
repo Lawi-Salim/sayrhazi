@@ -28,4 +28,4 @@ Avant un commit :
 
 ## Versionnement
 
-Les changements doivent utiliser un commit descriptif. Les versions publiques du noyau sont documentées dans `CHANGELOG.md` et peuvent être marquées par des tags Git tels que `v0.1.0`.
+Les commits suivent les Conventional Commits : `type(portée): objet` en minuscules, sans version dans le message. Types : `feat`, `fix`, `docs`, `test`, `refactor`, `chore`. Portées : `core`, `engine`, `cli`, `runtimes`, `docs`, `tests`, `watcher`. Exemple : `feat(watcher): moteur générique piloté par workflow.yaml`. Les versions vivent uniquement dans `VERSION`, `CHANGELOG.md`, les tags Git (`v0.1.0`) et les releases GitHub.
