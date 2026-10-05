@@ -1,22 +1,25 @@
 """
-watch-work.py — orchestrateur Sayrhazi build.txt TERMINÉ -> Hadji.
+watch-work.py — moteur de transitions Sayrhazi (Lot 4).
 
-Surveille `.opencode/resume/build.txt`. Déclenche Hadji uniquement si :
-- le fichier est stable (pas en cours d'écriture),
-- il contient un `task_id` stable et un statut `TERMINÉ`,
-- ce couple (task_id + hash) n'a pas déjà été déclenché,
-- `review.txt` ne couvre pas déjà ce `task_id` (revue plus récente que build :
-  survit au redémarrage du watcher, point 7 du contrat).
+Lit `.opencode/workflow.yaml` et déclenche, pour chaque étape `auto: true`,
+l'agent du rôle lorsque : le rapport déclencheur est stable, son `task_id`
+et son statut sont autorisés, la condition de l'étape est satisfaite, et le
+rapport de sortie ne couvre pas déjà ce `task_id`. Sans config valide, repli
+sur la transition historique : `build.txt TERMINÉ -> Hadji`.
 
-Ne déclenche jamais Bamse, ne boucle pas après review négative,
-ne publie / supprime rien. Vérifie que `review.txt` est produit.
+Garde-fous : verrou d'instance unique, anti-double en mémoire + sortie
+existante (survit au redémarrage, point 7 du contrat), minuteur visible,
+journal `history/workflow-log.md`, mise à jour minimale de
+`state/workflow-state.yaml` (la réconciliation complète reste
+`engine/state.py --reconcile`). Ne boucle pas après verdict négatif, ne
+publie / supprime rien.
 
 Sans dépendance externe. Windows / macOS / Linux.
 
 Usage :
     python .opencode/watch-work.py [--once] [--check] [--timeout SEC]
     --once    : une seule vérification puis sortie (0 = déclenché, 1 = rien)
-    --check   : valide la config sans surveiller (idéal pour tests)
+    --check   : valide config sans surveiller (idéal pour tests)
     --timeout : durée max de surveillance en secondes (0 = infini)
 """
 
@@ -36,6 +39,32 @@ IS_WINDOWS = os.name == "nt"
 AGENT_TO_TRIGGER = "hadji"
 POLL_INTERVAL_SECONDS = 3
 DEBOUNCE_SECONDS = 2
+LOCK_STALE_SECONDS = 600
+
+# Rôle -> fichier agent OpenCode (noms stables) et rapport produit.
+ROLE_AGENT_FILE = {"architect": "lawibrahim", "designer": "ali",
+                   "builder": "bamse", "reviewer": "hadji",
+                   "security": "hifadhui", "qa": "zawadi"}
+ROLE_REPORT = {"architect": "plan.txt", "designer": "design.txt",
+               "builder": "build.txt", "reviewer": "review.txt",
+               "security": "security.txt", "qa": "qa.txt"}
+ROLE_STATUS_OK = {"builder": ("TERMINÉ",), "reviewer": ("VALIDÉ", "VALIDÉ AVEC RÉSERVES"),
+                  "security": ("VALIDÉ", "VALIDÉ AVEC RÉSERVES"),
+                  "qa": ("VALIDÉ", "VALIDÉ AVEC RÉSERVES"),
+                  "designer": ("VALIDÉ",), "architect": ("VALIDÉ",)}
+
+# Condition déclarée -> cle lue dans sayrhazi.yaml (section quality).
+# design_required n'a pas d'indicateur : Ali reste manuel (Lot 4).
+CONDITION_KEYS = {"security_required": "security_audit_required_by_default",
+                  "visual_qa_required": "visual_qa_required"}
+
+AGENT_PROMPTS = {
+    "builder": "Build Sayrhazi task {task} : lis .opencode/resume/plan.txt et produis build.txt",
+    "reviewer": "Review Sayrhazi task {task} : lis .opencode/resume/build.txt et produis review.txt",
+    "security": "Audit Sayrhazi task {task} : lis .opencode/resume/build.txt et produis security.txt",
+    "qa": "QA Sayrhazi task {task} : lis .opencode/resume/build.txt et produis qa.txt",
+    "designer": "Design Sayrhazi task {task} : lis .opencode/resume/plan.txt et produis design.txt",
+}
 
 TASK_RE = re.compile(r"^\s*task_id\s*:\s*(\S+)\s*$", re.MULTILINE | re.IGNORECASE)
 STATUS_RE = re.compile(r"^\s*status\s*:\s*(\S.*?)\s*$", re.MULTILINE | re.IGNORECASE)
@@ -105,6 +134,383 @@ def parse_build_report(path: Path) -> Tuple[Optional[str], Optional[str]]:
     return task_id, stat
 
 
+def _strip_hash(line: str) -> str:
+    out: list[str] = []
+    quote: Optional[str] = None
+    for i, ch in enumerate(line):
+        if quote:
+            out.append(ch)
+            if ch == quote:
+                quote = None
+        elif ch in ("'", '"'):
+            quote = ch
+            out.append(ch)
+        elif ch == "#" and out and out[-1] == " ":
+            break
+        else:
+            out.append(ch)
+    return "".join(out).rstrip()
+
+
+def _scalar(value: str):
+    text = value.strip()
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ("'", '"'):
+        return text[1:-1]
+    low = text.lower()
+    if low == "true":
+        return True
+    if low == "false":
+        return False
+    return text
+
+
+def parse_workflow_minimal(path: Path) -> Tuple[Optional[dict], Optional[str]]:
+    """Sous-ensemble YAML pour workflow.yaml (miroir d'engine/workflow.py).
+
+    Mappings imbriqués (2 espaces) + listes `- ` + commentaires. Retourne
+    (config, None) ou (None, erreur). Toute forme hors sous-ensemble = erreur
+    claire, jamais devinée.
+    """
+    if not path.is_file():
+        return None, "absent"
+    try:
+        raw_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError as exc:
+        return None, f"illisible : {exc}"
+    items: list[tuple[int, int, str]] = []
+    for lineno, raw in enumerate(raw_lines, 1):
+        if not raw.strip() or raw.strip().startswith("#"):
+            continue
+        line = _strip_hash(raw)
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent % 2:
+            return None, f"ligne {lineno} : indentation impaire"
+        items.append((lineno, indent, line.strip()))
+
+    def block(pos: int, indent: int) -> Tuple[dict, int]:
+        data: dict = {}
+        while pos < len(items):
+            lineno, ind, content = items[pos]
+            if ind < indent:
+                break
+            if ind > indent:
+                raise _WorkflowSyntax(f"ligne {lineno} : inattendu `{content}`")
+            if content.startswith("- ") or ":" not in content:
+                raise _WorkflowSyntax(f"ligne {lineno} : attendu `cle: valeur`")
+            key, _, value = content.partition(":")
+            key, value = key.strip(), value.strip()
+            if value == "":
+                if pos + 1 < len(items) and items[pos + 1][1] > indent:
+                    child, pos = _node(pos + 1, items[pos + 1][1])
+                    data[key] = child
+                else:
+                    data[key] = None
+                    pos += 1
+            else:
+                data[key] = _scalar(value)
+                pos += 1
+        return data, pos
+
+    def _node(pos: int, indent: int):
+        if items[pos][2].startswith("- "):
+            return seq(pos, indent)
+        return block(pos, indent)
+
+    def seq(pos: int, indent: int) -> Tuple[list, int]:
+        out: list = []
+        while pos < len(items):
+            lineno, ind, content = items[pos]
+            if ind < indent or not content.startswith("- "):
+                break
+            if ind > indent:
+                raise _WorkflowSyntax(f"ligne {lineno} : inattendu `{content}`")
+            rest = content[2:].strip()
+            if ":" in rest and not rest.startswith(("[", "'", '"')):
+                key, _, value = rest.partition(":")
+                key, value = key.strip(), value.strip()
+                item = {key: _scalar(value)} if value else {key: None}
+                pos += 1
+                if value == "" and pos < len(items) and items[pos][1] > indent:
+                    child, pos = _node(pos, items[pos][1])
+                    item[key] = child
+                elif pos < len(items) and items[pos][1] > indent and not items[pos][2].startswith("- "):
+                    sub, pos = block(pos, items[pos][1])
+                    item.update(sub)
+                out.append(item)
+            else:
+                out.append(_scalar(rest))
+                pos += 1
+        return out, pos
+
+    try:
+        data, pos = block(0, 0)
+    except _WorkflowSyntax as exc:
+        return None, str(exc)
+    if pos != len(items):
+        return None, f"ligne {items[pos][0]} : inattendu `{items[pos][2]}`"
+    return data, None
+
+
+class _WorkflowSyntax(ValueError):
+    pass
+
+
+def read_conditions(project_root: Path) -> dict:
+    """Lit les indicateurs quality.* de sayrhazi.yaml (défaut False)."""
+    conditions = {name: False for name in ("security_required", "visual_qa_required", "design_required")}
+    config = project_root / ".opencode" / "sayrhazi.yaml"
+    try:
+        text = config.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return conditions
+    mapping = {"security_required": "security_audit_required_by_default",
+               "visual_qa_required": "visual_qa_required"}
+    for condition, key in mapping.items():
+        match = re.search(r"^\s*" + re.escape(key) + r"\s*:\s*(\S+)", text, re.MULTILINE | re.IGNORECASE)
+        if match and match.group(1).strip().lower() == "true":
+            conditions[condition] = True
+    return conditions
+
+
+def output_covers(output_file: Path, task_id: str, trigger_mtime: float) -> bool:
+    """Point 7 généralisé : le rapport de sortie couvre-t-il ce task_id ?
+
+    Vrai si le fichier existe, mentionne le task_id et est plus récent que le
+    déclencheur (un nouveau rapport déclencheur relance légitimement).
+    """
+    if not output_file.is_file():
+        return False
+    try:
+        text = output_file.read_text(encoding="utf-8", errors="replace")
+        mtime = output_file.stat().st_mtime
+    except OSError:
+        return False
+    return task_id in text and mtime >= trigger_mtime
+
+
+def eligible_transitions(config: dict, triggers: dict, conditions: dict, outputs: dict) -> list:
+    """Étapes éligibles, sans effet de bord (testable).
+
+    config : workflow parsé. triggers : {rapport: {task_id, status, mtime}}
+    (rapports stables uniquement). conditions : {nom: bool}. outputs :
+    {rapport: {task_id, mtime}} (rapports de sortie existants).
+    Retourne [(stage, task_id, raison), ...] pour les stages auto: true.
+    """
+    eligible: list = []
+    stages = config.get("stages") if isinstance(config, dict) else None
+    if not isinstance(stages, list):
+        return eligible
+    for stage in stages:
+        if not isinstance(stage, dict) or not stage.get("auto", False):
+            continue
+        sid = stage.get("id", "?")
+        trigger = stage.get("trigger") or {}
+        report, status = trigger.get("report"), trigger.get("status")
+        current = triggers.get(report)
+        if current is None:
+            continue
+        task_id = current.get("task_id")
+        if not task_id or current.get("status") != (status or "").strip().upper():
+            continue
+        condition = stage.get("condition")
+        if condition and not conditions.get(condition, False):
+            continue
+        agent = stage.get("agent")
+        output_report = ROLE_REPORT.get(agent or "")
+        if not output_report:
+            continue
+        out = outputs.get(output_report)
+        if out and out.get("task_id") == task_id and out.get("mtime", 0) >= current.get("mtime", 0):
+            continue
+        eligible.append((stage, task_id, f"{sid} prêt ({task_id})"))
+    return eligible
+
+
+def parse_report_file(path: Path) -> Tuple[Optional[str], Optional[str], Optional[float]]:
+    """(task_id, status, mtime) d'un rapport, ou (None, None, None)."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        mtime = path.stat().st_mtime
+    except OSError:
+        return None, None, None
+    task = TASK_RE.search(text)
+    status = STATUS_RE.search(text)
+    return ((task.group(1).strip() if task else None),
+            (status.group(1).strip().upper() if status else None), mtime)
+
+
+def select_auto_stages(config: Optional[dict]) -> Tuple[list, list]:
+    """Étapes automatiques utilisables + notes (étapes cassées ignorées)."""
+    notes: list = []
+    usable: list = []
+    stages = config.get("stages") if isinstance(config, dict) else None
+    if not isinstance(stages, list) or not stages:
+        return [], ["stages: liste non vide requise"]
+    known_reports = set(ROLE_REPORT.values())
+    for i, stage in enumerate(stages):
+        where = f"stages[{i}]"
+        if not isinstance(stage, dict) or not stage.get("id"):
+            notes.append(f"{where} ignorée (id absent)")
+            continue
+        if stage.get("agent") not in ROLE_AGENT_FILE:
+            notes.append(f"{where} ignorée (agent `{stage.get('agent')}` inconnu)")
+            continue
+        if not stage.get("auto", False):
+            continue
+        trigger = stage.get("trigger") or {}
+        if trigger.get("report") not in known_reports:
+            notes.append(f"{where} ignorée (trigger.report `{trigger.get('report')}` inconnu)")
+            continue
+        if not trigger.get("status"):
+            notes.append(f"{where} ignorée (trigger.status absent)")
+            continue
+        usable.append(stage)
+    return usable, notes
+
+
+def lock_path(project_root: Path) -> Path:
+    return project_root / ".opencode" / "state" / "watcher.lock"
+
+
+def acquire_lock(project_root: Path) -> bool:
+    """Verrou d'instance unique (reste périmé après 10 min)."""
+    path = lock_path(project_root)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return True
+    for _ in range(2):
+        try:
+            fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            try:
+                os.write(fd, f"{os.getpid()} {datetime.now().isoformat()}".encode("utf-8"))
+            finally:
+                os.close(fd)
+            return True
+        except FileExistsError:
+            try:
+                age = time.time() - path.stat().st_mtime
+            except OSError:
+                return False
+            if age >= LOCK_STALE_SECONDS:
+                try:
+                    path.unlink()
+                except OSError:
+                    return False
+                continue
+            return False
+        except OSError:
+            return True
+    return False
+
+
+def release_lock(project_root: Path) -> None:
+    try:
+        lock_path(project_root).unlink()
+    except OSError:
+        pass
+
+
+def journal(project_root: Path, message: str) -> None:
+    """Archive un événement dans history/workflow-log.md."""
+    try:
+        history = project_root / ".opencode" / "history" / "workflow-log.md"
+        history.parent.mkdir(parents=True, exist_ok=True)
+        with open(history, "a", encoding="utf-8") as fh:
+            fh.write(f"- [{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}\n")
+    except OSError as exc:
+        log(f"ATTENTION : journal inaccessible ({exc})")
+
+
+STATE_KEYS = ("task_id", "status", "started_at", "current_stages", "completed_stages",
+              "pending_stages", "blocked_stages", "running_agents")
+
+
+def _qscalar(value) -> str:
+    text = "" if value is None else str(value)
+    if text == "" or any(c in text for c in ":#{}[],&*?|-<>!=@`\"'"):
+        return '"' + text.replace('"', '\\"') + '"'
+    return text
+
+
+def _flow_items(text: str) -> list:
+    stripped = (text or "").strip()
+    if stripped.startswith("[") and stripped.endswith("]"):
+        inner = stripped[1:-1].strip()
+        if not inner:
+            return []
+        return [_unquote(part) for part in inner.split(",")]
+    return [stripped] if stripped else []
+
+
+def _unquote(text: str) -> str:
+    stripped = text.strip()
+    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in ("'", '"'):
+        return stripped[1:-1]
+    return stripped
+
+
+def read_state_minimal(project_root: Path) -> dict:
+    """Lit les 8 clefs connues de workflow-state.yaml (sans dépendance)."""
+    path = project_root / ".opencode" / "state" / "workflow-state.yaml"
+    data: dict = {}
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return data
+    for line in lines:
+        match = re.match(r"^\s{2}(\w+)\s*:\s*(.*)$", line)
+        if match and match.group(1) in STATE_KEYS:
+            data[match.group(1)] = _unquote(match.group(2))
+    return data
+
+
+def write_state_minimal(project_root: Path, values: dict) -> bool:
+    """Fusionne values dans workflow-state.yaml (clefs connues uniquement).
+
+    Mise à jour minimale d'exécution (running_agents, tâche, statut) ; la
+    réconciliation complète des étapes reste engine/state.py --reconcile.
+    """
+    path = project_root / ".opencode" / "state" / "workflow-state.yaml"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return False
+    merged = read_state_minimal(project_root)
+    for key, value in values.items():
+        if key in STATE_KEYS:
+            merged[key] = value
+    if not merged.get("started_at"):
+        merged["started_at"] = datetime.now().astimezone().replace(microsecond=0).isoformat()
+    lines = ["workflow:"]
+    for key in STATE_KEYS:
+        value = merged.get(key)
+        if key.endswith("_stages") or key == "running_agents":
+            items = value if isinstance(value, list) else _flow_items(value or "[]")
+            lines.append("  " + key + ": [" + ", ".join(_qscalar(x) for x in items) + "]")
+        else:
+            lines.append("  " + key + ": " + _qscalar(value))
+    try:
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
+def note_state_running(project_root: Path, task_id: str, agent: Optional[str]) -> None:
+    """Signale un agent en cours (ou la fin si agent None)."""
+    running = [agent] if agent else []
+    values: dict = {"task_id": task_id, "status": "IN_PROGRESS", "running_agents": running}
+    if agent is None:
+        state = read_state_minimal(project_root)
+        if state.get("task_id") != task_id:
+            return
+        values = {"running_agents": running}
+    write_state_minimal(project_root, values)
+
+
 def check_opencode_available() -> bool:
     try:
         cmd = "opencode --version" if IS_WINDOWS else ["opencode", "--version"]
@@ -119,29 +525,35 @@ def check_opencode_available() -> bool:
         return False
 
 
-def trigger_agent(project_root: Path, task_id: str) -> bool:
-    prompt = f"Review Sayrhazi task {task_id} : lis .opencode/resume/build.txt et produis review.txt"
-    log(f"build.txt TERMINÉ ({task_id}) -> appel de {AGENT_TO_TRIGGER}...")
+def trigger_stage(project_root: Path, stage: dict, task_id: str) -> bool:
+    """Déclenche l'agent d'une étape et vérifie son rapport de sortie."""
+    agent = (stage.get("agent") or "").strip().lower()
+    agent_file = ROLE_AGENT_FILE.get(agent, agent or AGENT_TO_TRIGGER)
+    output_report = ROLE_REPORT.get(agent, "")
+    trigger = stage.get("trigger") or {}
+    prompt = AGENT_PROMPTS.get(agent, "Sayrhazi task {task} : avance l'étape " + str(stage.get("id", "?")))
+    prompt = prompt.format(task=task_id)
+    log(f"{trigger.get('report')} {trigger.get('status')} ({task_id}) -> appel de {agent_file}...")
     start = time.time()
     stop_tick = threading.Event()
 
     def tick() -> None:
         while not stop_tick.wait(TICK_SECONDS):
-            log(f"{AGENT_TO_TRIGGER} en cours... {format_duration(time.time() - start)} ecoulees ({task_id})")
+            log(f"{agent_file} en cours... {format_duration(time.time() - start)} ecoulees ({task_id})")
 
     ticker = threading.Thread(target=tick, daemon=True)
     ticker.start()
     try:
         if IS_WINDOWS:
-            command_str = f'opencode run --agent {AGENT_TO_TRIGGER} "{prompt}"'
+            command_str = f'opencode run --agent {agent_file} "{prompt}"'
             result = subprocess.run(command_str, cwd=str(project_root), capture_output=True, text=True, shell=True, timeout=600, encoding="utf-8", errors="replace")
         else:
-            result = subprocess.run(["opencode", "run", "--agent", AGENT_TO_TRIGGER, prompt], cwd=str(project_root), capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
+            result = subprocess.run(["opencode", "run", "--agent", agent_file, prompt], cwd=str(project_root), capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
     except FileNotFoundError:
         log("ERREUR : commande 'opencode' introuvable.")
         return False
     except subprocess.TimeoutExpired:
-        log(f"ERREUR : timeout 600s sur appel Hadji ({task_id}, {format_duration(time.time() - start)} ecoulees).")
+        log(f"ERREUR : timeout 600s sur appel {agent_file} ({task_id}, {format_duration(time.time() - start)} ecoulees).")
         return False
     except Exception as exc:
         log(f"ERREUR inattendue : {exc}")
@@ -156,17 +568,30 @@ def trigger_agent(project_root: Path, task_id: str) -> bool:
         if result.stderr:
             print(result.stderr)
         return False
-    log(f"{AGENT_TO_TRIGGER} terminé pour {task_id} en {format_duration(time.time() - start)}.")
-    review = project_root / ".opencode" / "resume" / "review.txt"
-    if not review.is_file():
-        log("ATTENTION : review.txt absent après déclenchement. Vérifie la session Hadji.")
+    log(f"{agent_file} terminé pour {task_id} en {format_duration(time.time() - start)}.")
+    if not output_report:
+        return True
+    output = project_root / ".opencode" / "resume" / output_report
+    if not output.is_file():
+        log(f"ATTENTION : {output_report} absent après déclenchement. Vérifie la session {agent_file}.")
         return False
-    text = review.read_text(encoding="utf-8", errors="replace")
+    try:
+        text = output.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        log(f"ATTENTION : {output_report} illisible ({exc}).")
+        return False
     if task_id not in text:
-        log(f"ATTENTION : review.txt ne mentionne pas {task_id}.")
+        log(f"ATTENTION : {output_report} ne mentionne pas {task_id}.")
         return False
-    log(f"review.txt vérifié pour {task_id}.")
+    log(f"{output_report} vérifié pour {task_id}.")
     return True
+
+
+def trigger_agent(project_root: Path, task_id: str) -> bool:
+    """Chemin historique build.txt TERMINÉ -> Hadji (repli sans config)."""
+    return trigger_stage(project_root, {"id": "review", "agent": "reviewer",
+                                        "trigger": {"report": "build.txt", "status": "TERMINÉ"}},
+                         task_id)
 
 
 def should_trigger(build_file: Path, last_trigger: str) -> Tuple[bool, str, Optional[str]]:
@@ -207,7 +632,7 @@ def should_trigger(build_file: Path, last_trigger: str) -> Tuple[bool, str, Opti
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Watcher Sayrhazi build.txt -> Hadji")
+    parser = argparse.ArgumentParser(description="Moteur de transitions Sayrhazi (workflow.yaml, repli build.txt -> Hadji)")
     parser.add_argument("--once", action="store_true", help="une seule vérification")
     parser.add_argument("--check", action="store_true", help="valide config sans surveiller")
     parser.add_argument("--timeout", type=int, default=0, help="durée max en secondes (0=infini)")
@@ -219,7 +644,6 @@ def main() -> int:
         return 2
     log(f"Racine du projet : {root}")
     build_file = root / ".opencode" / "resume" / "build.txt"
-    log(f"Surveillance de : {build_file}")
 
     if not (root / ".opencode" / "sayrhazi.yaml").is_file():
         log("ERREUR : .opencode/sayrhazi.yaml absent.")
@@ -228,6 +652,15 @@ def main() -> int:
         ok = check_opencode_available()
         task_id, status = parse_build_report(build_file) if build_file.is_file() else (None, None)
         log(f"check: build.txt task_id={task_id} status={status}")
+        config, werr = parse_workflow_minimal(root / ".opencode" / "workflow.yaml")
+        if werr or config is None:
+            log(f"check: workflow.yaml inutilisable ({werr or 'absent'}) : repli build.txt -> Hadji")
+        else:
+            usable, notes = select_auto_stages(config)
+            for note in notes:
+                log(f"check: étape ignorée : {note}")
+            log(f"check: workflow.yaml {len(usable)} étape(s) automatique(s) : "
+                + ", ".join(s.get("id", "?") for s in usable))
         log("check OK" if ok else "check OK (opencode absent, surveillance possible)")
         return 0
 
@@ -236,6 +669,133 @@ def main() -> int:
         log("ERREUR : racine projet non inscriptible.")
         return 2
 
+    if not acquire_lock(root):
+        log("Une instance tourne déjà (verrou .opencode/state/watcher.lock). Arrêt.")
+        return 1
+    try:
+        config, werr = parse_workflow_minimal(root / ".opencode" / "workflow.yaml")
+        usable, notes = select_auto_stages(config) if config else ([], [werr or "absent"])
+        if not usable:
+            if notes:
+                log(f"ATTENTION : workflow.yaml inutilisable ({notes[0]}) : repli build.txt -> Hadji.")
+            return run_legacy(root, args, build_file)
+        for note in notes:
+            log(f"ATTENTION : {note}")
+        log(f"Workflow : {len(usable)} étape(s) automatique(s) : "
+            + ", ".join(s.get("id", "?") for s in usable))
+        return run_generic(root, args, usable)
+    finally:
+        release_lock(root)
+
+
+def watched_reports(usable: list) -> list:
+    """Rapports déclencheurs des étapes automatiques, triés et uniques."""
+    names = []
+    for stage in usable:
+        report = (stage.get("trigger") or {}).get("report")
+        if report and report not in names:
+            names.append(report)
+    return sorted(names)
+
+
+def run_generic(root: Path, args, usable: list) -> int:
+    """Boucle moteur : toute transition déclarée et éligible est déclenchée."""
+    watched = watched_reports(usable)
+    log("Surveillance de : " + ", ".join(str(root / ".opencode" / "resume" / name) for name in watched))
+    resume = root / ".opencode" / "resume"
+    last_keys: set = set()
+    last_hashes: dict = {}
+    start = time.time()
+
+    def snapshot() -> Tuple[dict, dict]:
+        triggers: dict = {}
+        outputs: dict = {}
+        for name in watched:
+            path = resume / name
+            task_id, status, mtime = parse_report_file(path)
+            if task_id is None:
+                continue
+            triggers[name] = {"task_id": task_id, "status": status, "mtime": mtime or 0.0,
+                              "hash": file_hash(path)}
+        for name in ROLE_REPORT.values():
+            path = resume / name
+            if not path.is_file():
+                continue
+            task_id, _status, mtime = parse_report_file(path)
+            if task_id is not None:
+                outputs[name] = {"task_id": task_id, "mtime": mtime or 0.0}
+        return triggers, outputs
+
+    def describe(triggers: dict) -> str:
+        return "; ".join(f"{name} {info.get('task_id')}/{info.get('status')}"
+                         for name, info in sorted(triggers.items())) or "aucun rapport"
+
+    def evaluate() -> bool:
+        triggers, outputs = snapshot()
+        conditions = read_conditions(root)
+        found = eligible_transitions({"stages": usable}, triggers, conditions, outputs)
+        log(f"État : {describe(triggers)}")
+        ok_any = False
+        for stage, task_id, why in found:
+            trigger_report = (stage.get("trigger") or {}).get("report")
+            key = f"{stage.get('id')}:{task_id}:{triggers.get(trigger_report, {}).get('hash')}"
+            if key in last_keys:
+                log(f"État : {task_id} déjà déclenché pour {stage.get('id')}")
+                continue
+            log(f"État : {why}")
+            journal(root, f"{stage.get('id')} déclenchée pour {task_id}")
+            note_state_running(root, task_id, stage.get("agent"))
+            if trigger_stage(root, stage, task_id):
+                last_keys.add(key)
+                journal(root, f"{stage.get('id')} terminée pour {task_id}")
+                note_state_running(root, task_id, None)
+                log("En attente d'une autre tâche... (Ctrl+C pour arrêter)")
+                ok_any = True
+            else:
+                note_state_running(root, task_id, None)
+                log("Échec déclenchement, on réessaiera au prochain passage.")
+        return ok_any
+
+    def one_cycle() -> bool:
+        changed = False
+        for name in watched:
+            current = file_hash(resume / name)
+            if current != last_hashes.get(name):
+                last_hashes[name] = current
+                if current is None:
+                    changed = True
+                    continue
+                time.sleep(DEBOUNCE_SECONDS)
+                stable = file_hash(resume / name)
+                if stable != current:
+                    log(f"État : {name} instable (écriture en cours)")
+                    last_hashes[name] = stable
+                    continue
+                last_hashes[name] = stable
+                changed = True
+        if not changed:
+            return False
+        return evaluate()
+
+    if args.once:
+        return 0 if one_cycle() else 1
+
+    log("En attente... (Ctrl+C pour arrêter)")
+    try:
+        while True:
+            if args.timeout and (time.time() - start) > args.timeout:
+                log("Timeout atteint, arrêt.")
+                return 1
+            one_cycle()
+            time.sleep(POLL_INTERVAL_SECONDS)
+    except KeyboardInterrupt:
+        log("Arrêt (Ctrl+C).")
+        return 0
+
+
+def run_legacy(root: Path, args, build_file: Path) -> int:
+    """Chemin historique build.txt TERMINÉ -> Hadji (sans config)."""
+    log(f"Surveillance de : {build_file}")
     last_trigger = ""
     start = time.time()
 

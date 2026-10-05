@@ -282,6 +282,80 @@ class TestStateReconcile(unittest.TestCase):
                                                      "running_agents": []}}))
 
 
+class TestWatcherEngine(unittest.TestCase):
+    @classmethod
+    def _watcher(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "watch_work", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_config_moteur(self):
+        from pathlib import Path as _Path
+        w = self._watcher()
+        cfg, err = w.parse_workflow_minimal(
+            _Path(str(ROOT / "runtimes" / "opencode" / "templates" / "workflow.yaml")))
+        self.assertIsNone(err, err)
+        usable, notes = w.select_auto_stages(cfg)
+        self.assertEqual([s["id"] for s in usable], ["review"])
+        self.assertEqual(notes, [])
+
+    def test_eligibilite(self):
+        w = self._watcher()
+        cfg, _ = w.parse_workflow_minimal(
+            __import__("pathlib").Path(str(ROOT / "core" / "workflow" / "workflow.yaml")))
+        usable, _ = w.select_auto_stages(cfg)
+        cfg = {"stages": usable}
+        conds = {"security_required": False, "visual_qa_required": False, "design_required": False}
+        ready = {"build.txt": {"task_id": "F-1", "status": "TERMINÉ", "mtime": 100.0, "hash": "h"}}
+        found = w.eligible_transitions(cfg, ready, conds, {})
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0][1], "F-1")
+        stale = {"review.txt": {"task_id": "F-1", "mtime": 200.0}}
+        self.assertEqual(w.eligible_transitions(cfg, ready, conds, stale), [])
+        fresh = {"review.txt": {"task_id": "F-1", "mtime": 50.0}}
+        self.assertEqual(len(w.eligible_transitions(cfg, ready, conds, fresh)), 1)
+        encours = {"build.txt": {"task_id": "F-1", "status": "EN COURS", "mtime": 100.0, "hash": "h"}}
+        self.assertEqual(w.eligible_transitions(cfg, encours, conds, {}), [])
+
+    def test_config_cassee_jamais_crash(self):
+        import tempfile
+        from pathlib import Path as _Path
+        w = self._watcher()
+        bad = _Path(tempfile.mkdtemp()) / "workflow.yaml"
+        bad.write_text("stages:\n  - id: x\n    agent: nope\n    auto: true\n    trigger:\n"
+                       "      report: build.txt\n      status: TERMINÉ\n", encoding="utf-8")
+        cfg, err = w.parse_workflow_minimal(bad)
+        self.assertIsNone(err, err)
+        usable, notes = w.select_auto_stages(cfg)
+        self.assertEqual(usable, [])
+        self.assertEqual(len(notes), 1)
+
+    def test_verrou_et_etat(self):
+        import sys
+        import tempfile
+        from pathlib import Path as _Path
+        w = self._watcher()
+        d = _Path(tempfile.mkdtemp())
+        self.assertTrue(w.acquire_lock(d))
+        self.assertFalse(w.acquire_lock(d))
+        w.release_lock(d)
+        self.assertTrue(w.acquire_lock(d))
+        w.release_lock(d)
+        w.journal(d, "transition test")
+        self.assertTrue((d / ".opencode" / "history" / "workflow-log.md").is_file())
+        w.note_state_running(d, "F-9", "reviewer")
+        w.note_state_running(d, "F-9", None)
+        sys.path.insert(0, str(ROOT / "engine"))
+        from state import load_state, validate_state
+        st = load_state(d)
+        self.assertEqual(st["workflow"]["task_id"], "F-9")
+        self.assertEqual(validate_state(st), [])
+        self.assertEqual(st["workflow"]["running_agents"], [])
+
+
 class TestState(unittest.TestCase):
     def test_roundtrip(self):
         from state import default_state, load_state, save_state

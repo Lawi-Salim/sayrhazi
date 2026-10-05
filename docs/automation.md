@@ -63,11 +63,13 @@ Au redémarrage (ou à tout moment), réconcilier avant de reprendre :
 python engine/state.py --reconcile --project .
 ```
 
-La réconciliation lit l'état, relit `workflow.yaml`, vérifie les rapports du `task_id` actif, ne retient que les étapes éligibles, ne relance jamais une étape terminée (sauf retour `CORRECTIONS NÉCESSAIRES` vers l'implémentation) et signale toute incohérence au lieu de la deviner. `tunda sayrhazi` contrôle la présence et la validité de l'état sans bloquer. Le watcher lira et écrira l'état au Lot 4.
+La réconciliation lit l'état, relit `workflow.yaml`, vérifie les rapports du `task_id` actif, ne retient que les étapes éligibles, ne relance jamais une étape terminée (sauf retour `CORRECTIONS NÉCESSAIRES` vers l'implémentation) et signale toute incohérence au lieu de la deviner. `tunda sayrhazi` contrôle la présence et la validité de l'état sans bloquer. Depuis le Lot 4, le watcher lit la config et met à jour l'état minimal + le journal (la réconciliation complète reste `engine/state.py --reconcile`).
 
-## Watcher actuel (`runtimes/opencode/scripts/watch-work.py`, installé dans `.opencode/`)
+## Moteur (`runtimes/opencode/scripts/watch-work.py`, installé dans `.opencode/`)
 
-Le watcher surveille `.opencode/resume/build.txt` et lance Hadji uniquement si le rapport est complet : fichier stable (anti écriture en cours), `task_id` présent et `status: TERMINÉ`. Il refuse les statuts incomplets (`EN COURS`, `BLOQUÉ`, absent), empêche les doubles déclenchements (`task_id` + hash déjà traité en mémoire, plus `review.txt` existant pour le même `task_id` après redémarrage), applique un timeout et vérifie que `review.txt` mentionne le même `task_id`. Un nouveau `build.txt` de Bamse (plus récent que la revue, ex. après `CORRECTIONS NÉCESSAIRES`) relance légitimement la transition.
+Le watcher est devenu un moteur piloté par `.opencode/workflow.yaml` : pour chaque étape `auto: true`, il vérifie rapport stable, `task_id` + statut autorisés, condition satisfaite et sortie non existante, puis appelle l'agent du rôle (prompt, minuteur, durée, vérification du rapport produit). Verrou d'instance unique, anti-double en mémoire + sortie existante (point 7), journal `history/workflow-log.md`, mise à jour minimale de `state/workflow-state.yaml`. Sans `workflow.yaml` valide, repli sur la transition historique `build.txt TERMINÉ → Hadji`, sans jamais planter.
+
+Les conditions se résolvent depuis `sayrhazi.yaml` (`visual_qa_required` → Zawadi, `security_audit_required_by_default` → Hifadhui ; `design_required` sans indicateur : Ali reste manuel). Étapes inconnues ou cassées : signalées et ignorées, jamais devinées.
 
 Modes utiles : `--check` (valide la config sans surveiller), `--once` (une seule vérification, exit `0` si déclenché), `--timeout SEC`.
 

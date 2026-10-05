@@ -1,5 +1,9 @@
 # Changelog Sayrhazi
 
+## 0.7.0 — 2026-10-04
+
+- Lot 4 watcher généralisé : `watch-work.py` devenu moteur piloté par `workflow.yaml` (étapes `auto: true`, conditions depuis `sayrhazi.yaml`, garde sortie-existante généralisée, verrou d'instance, journal `workflow-log.md`, état minimal compatible `engine/state.py`, repli historique sans config). Déclenchement générique par rôle, `eligible_transitions()` pure et testée. 4 nouveaux tests (`TestWatcherEngine`), produit du nom conservé pour compatibilité.
+
 ## 0.6.0 — 2026-09-26
 
 - Licence : `LICENSE` MIT remplacée par tous droits réservés (ne vaut que pour l'avenir, les versions déjà diffusées restent MIT).
