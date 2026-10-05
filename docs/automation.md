@@ -71,6 +71,8 @@ Le watcher est devenu un moteur piloté par `.opencode/workflow.yaml` : pour cha
 
 Les conditions se résolvent depuis `sayrhazi.yaml` (`visual_qa_required` → Zawadi, `security_audit_required_by_default` → Hifadhui ; `design_required` sans indicateur : Ali reste manuel). Sont automatiques : `review` (toujours), `security` et `visual_qa` (si requis), `rework` (retour vers Bamse sur `CORRECTIONS NÉCESSAIRES`, sauf `build.txt` plus récent). Étapes inconnues ou cassées : signalées et ignorées, jamais devinées. `tunda sayrhazi` affiche les agents requis, manuels et inactifs de la configuration.
 
+Les étapes éligibles ensemble partent en parallèle (Lot 6, threads stdlib), bornées par `workflow.max_parallel_agents` (défaut 3, garde-fou machine). La convergence est journalisée (`Convergence : review OK, security OK (2/2)`) : un échec (timeout, erreur) n'empêche jamais les autres branches, qui écrivent chacune leur rapport ; la branche échouée sera réévaluée au prochain changement. `running_agents` reflète l'ensemble en cours. Séquentiel si une seule étape éligible, repli historique sinon.
+
 Modes utiles : `--check` (valide la config sans surveiller), `--once` (une seule vérification, exit `0` si déclenché), `--timeout SEC`.
 
 ## Limites connues

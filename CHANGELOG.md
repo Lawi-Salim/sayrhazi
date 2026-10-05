@@ -1,5 +1,9 @@
 # Changelog Sayrhazi
 
+## 0.9.0 — 2026-10-05
+
+- Lot 6 parallélisme : étapes éligibles ensemble lancées en parallèle (`ThreadPoolExecutor` stdlib), bornées par `workflow.max_parallel_agents` (défaut 3, garde-fou machine), convergence journalisée (`Convergence : … (n/n)`), échec d'une branche isolé (les autres continuent, réévaluation au prochain changement). `running_agents` add/remove thread-safe, séquentiel si une seule étape, repli historique inchangé. 4 nouveaux tests (`TestParallel`, déclencheurs simulés).
+
 ## 0.8.0 — 2026-10-05
 
 - Lot 5 conditions : `security` et `visual_qa` automatiques sous condition (`security_required`, `visual_qa_required` lus dans `sayrhazi.yaml`, sécurité vraie par défaut), nouvelle étape `rework` (retour vers Bamse sur `CORRECTIONS NÉCESSAIRES`, sans rappel si `build.txt` plus récent), Ali toujours manuel (`design_required` ajouté au schéma et au modèle, défaut faux). Nouveau `summarize_agents()` + section « agents requis » dans `tunda` (requis / manuel / inactif). 4 nouveaux tests (`TestConditions`).

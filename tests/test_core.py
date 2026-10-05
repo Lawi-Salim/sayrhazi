@@ -483,6 +483,112 @@ class TestConditions(unittest.TestCase):
         self.assertEqual(rows["design"], "manuel")
 
 
+class TestParallel(unittest.TestCase):
+    def _stages(self):
+        return [{"id": "review", "agent": "reviewer"},
+                {"id": "security", "agent": "security"},
+                {"id": "visual_qa", "agent": "qa"}]
+
+    def test_parallelisme_reel(self):
+        import importlib.util
+        import tempfile
+        import threading
+        import time as _time
+        from pathlib import Path as _Path
+        spec = importlib.util.spec_from_file_location(
+            "watch_work_p", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        w = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(w)
+        root = _Path(tempfile.mkdtemp())
+        lock = threading.Lock()
+        current = {"n": 0, "max": 0}
+
+        def stub(_root, stage, _task):
+            with lock:
+                current["n"] += 1
+                current["max"] = max(current["max"], current["n"])
+            _time.sleep(0.3)
+            with lock:
+                current["n"] -= 1
+            return True
+
+        w.trigger_stage = stub
+        items = [(f"k{i}", s, "T", f"{s['id']} prêt (T)") for i, s in enumerate(self._stages())]
+        start = _time.time()
+        ok, done, failed = w.run_branches(root, items, 3)
+        elapsed = _time.time() - start
+        self.assertTrue(ok)
+        self.assertEqual(len(done), 3)
+        self.assertEqual(failed, [])
+        self.assertEqual(current["max"], 3)
+        self.assertLess(elapsed, 0.9)
+
+    def test_plafond_et_echec_isole(self):
+        import importlib.util
+        import tempfile
+        import threading
+        import time as _time
+        from pathlib import Path as _Path
+        spec = importlib.util.spec_from_file_location(
+            "watch_work_q", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        w = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(w)
+        root = _Path(tempfile.mkdtemp())
+        lock = threading.Lock()
+        current = {"n": 0, "max": 0}
+
+        def stub(_root, stage, _task):
+            with lock:
+                current["n"] += 1
+                current["max"] = max(current["max"], current["n"])
+            _time.sleep(0.1)
+            with lock:
+                current["n"] -= 1
+            return stage["id"] != "security"
+
+        w.trigger_stage = stub
+        items = [(f"k{i}", s, "T", f"{s['id']} prêt (T)") for i, s in enumerate(self._stages())]
+        ok, done, failed = w.run_branches(root, items, 1)
+        self.assertEqual(current["max"], 1)
+        self.assertTrue(ok)
+        self.assertEqual(len(done), 2)
+        self.assertEqual(len(failed), 1)
+
+    def test_etat_add_remove(self):
+        import importlib.util
+        import sys
+        import tempfile
+        from pathlib import Path as _Path
+        spec = importlib.util.spec_from_file_location(
+            "watch_work_r", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        w = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(w)
+        root = _Path(tempfile.mkdtemp())
+        w.state_agents_add(root, "F-1", "reviewer")
+        w.state_agents_add(root, "F-1", "reviewer")
+        w.state_agents_add(root, "F-1", "security")
+        sys.path.insert(0, str(ROOT / "engine"))
+        from state import load_state
+        running = load_state(root)["workflow"]["running_agents"]
+        self.assertEqual(sorted(running), ["reviewer", "security"])
+        w.state_agents_remove(root, "F-1", "reviewer")
+        w.state_agents_remove(root, "F-1", "reviewer")
+        running = load_state(root)["workflow"]["running_agents"]
+        self.assertEqual(running, ["security"])
+
+    def test_max_parallel_garde_fou(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "watch_work_s", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        w = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(w)
+        self.assertEqual(w.max_parallel_agents({"workflow": {"max_parallel_agents": 2}}), 2)
+        self.assertEqual(w.max_parallel_agents({"workflow": {"max_parallel_agents": 0}}), 3)
+        self.assertEqual(w.max_parallel_agents({"workflow": {"max_parallel_agents": True}}), 3)
+        self.assertEqual(w.max_parallel_agents({}), 3)
+        self.assertEqual(w.max_parallel_agents(None), 3)
+
+
 class TestState(unittest.TestCase):
     def test_roundtrip(self):
         from state import default_state, load_state, save_state
