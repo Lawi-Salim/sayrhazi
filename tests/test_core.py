@@ -95,6 +95,13 @@ class TestReport(unittest.TestCase):
         rep = parse_report("task_id: FEATURE-001\nagent: builder\nstatus: TERMINÉ\nversion: \"2026-09-23T19:30:00+04:00\"\nsummary: Fait.\n")
         self.assertTrue(any("version" in v for v in validate_report(rep)))
 
+    def test_bom_ignore(self):
+        from report import parse_report, validate_report
+        rep = parse_report("\ufeff" + "task_id: FEATURE-001\nagent: builder\nstatus: TERMINÉ\n"
+                           'completed_at: "2026-09-26T10:00:00+04:00"\nsummary: Fait.\n')
+        self.assertEqual(rep.get("task_id"), "FEATURE-001")
+        self.assertEqual(validate_report(rep), [])
+
     def test_task_id_formats(self):
         from report import parse_report, validate_report
         for tid in ("FEATURE-001", "MPANGO-2026-014"):
@@ -299,7 +306,8 @@ class TestWatcherEngine(unittest.TestCase):
             _Path(str(ROOT / "runtimes" / "opencode" / "templates" / "workflow.yaml")))
         self.assertIsNone(err, err)
         usable, notes = w.select_auto_stages(cfg)
-        self.assertEqual([s["id"] for s in usable], ["review"])
+        self.assertEqual([s["id"] for s in usable],
+                         ["review", "security", "visual_qa", "rework"])
         self.assertEqual(notes, [])
 
     def test_eligibilite(self):
@@ -333,6 +341,64 @@ class TestWatcherEngine(unittest.TestCase):
         self.assertEqual(usable, [])
         self.assertEqual(len(notes), 1)
 
+    def test_bom_review_couverte(self):
+        # Scénario Sarhi : review.txt avec BOM plus récente que build.txt.
+        import tempfile
+        from pathlib import Path as _Path
+        w = self._watcher()
+        d = _Path(tempfile.mkdtemp())
+        resume = d / ".opencode" / "resume"
+        resume.mkdir(parents=True)
+        (resume / "build.txt").write_text(
+            "task_id: F-1\nagent: builder\nstatus: TERMINÉ\n"
+            'completed_at: "2026-09-26T10:00:00+04:00"\nsummary: Fait.\n', encoding="utf-8")
+        (resume / "review.txt").write_text(
+            "\ufefftask_id: F-1\nagent: reviewer\nstatus: VALIDÉ\n"
+            'completed_at: "2026-09-26T11:00:00+04:00"\nsummary: OK.\n', encoding="utf-8")
+        import os as _os
+        import time as _time
+        now = _time.time()
+        _os.utime(str(resume / "build.txt"), (now - 100, now - 100))
+        _os.utime(str(resume / "review.txt"), (now, now))
+        cfg, _ = w.parse_workflow_minimal(
+            _Path(str(ROOT / "core" / "workflow" / "workflow.yaml")))
+        usable, _ = w.select_auto_stages(cfg)
+        triggers, outputs = {}, {}
+        for name in ("build.txt", "review.txt"):
+            tid, stat, mtime = w.parse_report_file(resume / name)
+            self.assertEqual(tid, "F-1", name)
+            triggers[name] = {"task_id": tid, "status": stat, "mtime": mtime, "hash": "h"}
+            outputs[name] = {"task_id": tid, "mtime": mtime}
+        conds = {"security_required": False, "visual_qa_required": False, "design_required": False}
+        self.assertEqual(w.eligible_transitions({"stages": usable}, triggers, conds, outputs), [])
+
+    def test_verrou_pid_vivant(self):
+        import os as _os
+        import tempfile
+        import time as _time
+        from pathlib import Path as _Path
+        w = self._watcher()
+        d = _Path(tempfile.mkdtemp())
+        self.assertTrue(w.acquire_lock(d))
+        self.assertEqual(w.lock_holder_pid(d), _os.getpid())
+        self.assertTrue(w.holder_alive(d))
+        # Verrou périmé mais détenteur vivant (long run) : jamais purgé.
+        old = _time.time() - 3600
+        _os.utime(str(d / ".opencode" / "state" / "watcher.lock"), (old, old))
+        self.assertFalse(w.acquire_lock(d))
+        self.assertEqual(w.lock_holder_pid(d), _os.getpid())
+        # Verrou périmé d'un mort : purgé puis acquis.
+        (d / ".opencode" / "state" / "watcher.lock").write_text(
+            "2147483647 2020-01-01T00:00:00", encoding="utf-8")
+        _os.utime(str(d / ".opencode" / "state" / "watcher.lock"), (old, old))
+        self.assertFalse(w.holder_alive(d))
+        self.assertTrue(w.acquire_lock(d))
+        # Release ne supprime jamais le verrou d'autrui.
+        (d / ".opencode" / "state" / "watcher.lock").write_text(
+            "2147483647 2020-01-01T00:00:00", encoding="utf-8")
+        w.release_lock(d)
+        self.assertTrue((d / ".opencode" / "state" / "watcher.lock").is_file())
+
     def test_verrou_et_etat(self):
         import sys
         import tempfile
@@ -354,6 +420,67 @@ class TestWatcherEngine(unittest.TestCase):
         self.assertEqual(st["workflow"]["task_id"], "F-9")
         self.assertEqual(validate_state(st), [])
         self.assertEqual(st["workflow"]["running_agents"], [])
+
+
+class TestConditions(unittest.TestCase):
+    def _cfg(self):
+        from workflow import parse_workflow
+        data, err = parse_workflow(
+            (ROOT / "core" / "workflow" / "workflow.yaml").read_text(encoding="utf-8"))
+        self.assertIsNone(err, err)
+        return data
+
+    def _watcher(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "watch_work", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_seuls_requis_tournent(self):
+        w = self._watcher()
+        data = self._cfg()
+        usable, _ = w.select_auto_stages(data)
+        self.assertEqual([s["id"] for s in usable], ["review", "security", "visual_qa", "rework"])
+        cfg = {"stages": usable}
+        build = {"build.txt": {"task_id": "F-1", "status": "TERMINÉ", "mtime": 100.0, "hash": "h"}}
+        off = {"security_required": False, "visual_qa_required": False, "design_required": False}
+        self.assertEqual([s["id"] for s, _, _ in w.eligible_transitions(cfg, build, off, {})],
+                         ["review"])
+        on = {"security_required": True, "visual_qa_required": True, "design_required": False}
+        got = sorted(s["id"] for s, _, _ in w.eligible_transitions(cfg, build, on, {}))
+        self.assertEqual(got, ["review", "security", "visual_qa"])
+
+    def test_rework_corrections(self):
+        w = self._watcher()
+        data = self._cfg()
+        usable, _ = w.select_auto_stages(data)
+        cfg = {"stages": usable}
+        off = {"security_required": False, "visual_qa_required": False, "design_required": False}
+        trig = {"review.txt": {"task_id": "F-1", "status": "CORRECTIONS NÉCESSAIRES",
+                               "mtime": 200.0, "hash": "h"}}
+        outs = {"build.txt": {"task_id": "F-1", "mtime": 100.0}}
+        got = [s["id"] for s, _, _ in w.eligible_transitions(cfg, trig, off, outs)]
+        self.assertEqual(got, ["rework"])
+        # Bamse a déjà re-livré : on ne le rappelle pas, Hadji reprend.
+        outs_frais = {"build.txt": {"task_id": "F-1", "mtime": 300.0}}
+        trig2 = {"build.txt": {"task_id": "F-1", "status": "TERMINÉ", "mtime": 300.0, "hash": "h2"},
+                 "review.txt": {"task_id": "F-1", "status": "CORRECTIONS NÉCESSAIRES",
+                                "mtime": 200.0, "hash": "h"}}
+        got2 = sorted(s["id"] for s, _, _ in w.eligible_transitions(cfg, trig2, off, outs_frais))
+        self.assertEqual(got2, ["review"])
+
+    def test_summarize_agents(self):
+        from workflow import summarize_agents
+        rows = dict((sid, state) for sid, _, state in summarize_agents(
+            self._cfg(), {"security_required": True, "visual_qa_required": False,
+                          "design_required": False}))
+        self.assertEqual(rows["review"], "requis")
+        self.assertEqual(rows["security"], "requis")
+        self.assertTrue(rows["visual_qa"].startswith("inactif"))
+        self.assertEqual(rows["implementation"], "manuel")
+        self.assertEqual(rows["design"], "manuel")
 
 
 class TestState(unittest.TestCase):

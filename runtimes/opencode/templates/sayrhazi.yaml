@@ -2,7 +2,7 @@
 # Ce fichier décrit le projet courant ; il ne lance aucun service.
 workflow:
   name: Sayrhazi # Ne pas modifier
-  version: "0.7.0" # Ne pas modifier
+  version: "0.8.0" # Ne pas modifier
 
 project:
   name: A_COMPLETER # Renseigner le nom du projet
@@ -41,6 +41,7 @@ runtime:
 quality:
   security_audit_required_by_default: true
   visual_qa_required: false
+  design_required: false
   required_checks: []
 
 integration:

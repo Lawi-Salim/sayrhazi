@@ -2,7 +2,8 @@
 # Copié dans `.opencode/workflow.yaml` à l'installation, jamais écrasé ensuite.
 # Les étapes désignent des rôles stables, jamais des noms d'affichage.
 # `auto: true` = transition prise en charge par le watcher ; `auto: false` =
-# orchestration humaine. Aujourd'hui seule `review` est automatique.
+# orchestration humaine. Automatiques : review, security et visual_qa (si
+# requis dans sayrhazi.yaml), rework (retour vers builder sur CORRECTIONS).
 # Vérifié par `tunda sayrhazi` (présence + validité, jamais bloquant).
 workflow:
   mode: supervised
@@ -38,7 +39,7 @@ stages:
     trigger:
       report: build.txt
       status: TERMINÉ
-    auto: false
+    auto: true
 
   - id: visual_qa
     agent: qa
@@ -46,4 +47,11 @@ stages:
     trigger:
       report: build.txt
       status: TERMINÉ
-    auto: false
+    auto: true
+
+  - id: rework
+    agent: builder
+    trigger:
+      report: review.txt
+      status: CORRECTIONS NÉCESSAIRES
+    auto: true

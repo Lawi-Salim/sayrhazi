@@ -69,7 +69,7 @@ La réconciliation lit l'état, relit `workflow.yaml`, vérifie les rapports du 
 
 Le watcher est devenu un moteur piloté par `.opencode/workflow.yaml` : pour chaque étape `auto: true`, il vérifie rapport stable, `task_id` + statut autorisés, condition satisfaite et sortie non existante, puis appelle l'agent du rôle (prompt, minuteur, durée, vérification du rapport produit). Verrou d'instance unique, anti-double en mémoire + sortie existante (point 7), journal `history/workflow-log.md`, mise à jour minimale de `state/workflow-state.yaml`. Sans `workflow.yaml` valide, repli sur la transition historique `build.txt TERMINÉ → Hadji`, sans jamais planter.
 
-Les conditions se résolvent depuis `sayrhazi.yaml` (`visual_qa_required` → Zawadi, `security_audit_required_by_default` → Hifadhui ; `design_required` sans indicateur : Ali reste manuel). Étapes inconnues ou cassées : signalées et ignorées, jamais devinées.
+Les conditions se résolvent depuis `sayrhazi.yaml` (`visual_qa_required` → Zawadi, `security_audit_required_by_default` → Hifadhui ; `design_required` sans indicateur : Ali reste manuel). Sont automatiques : `review` (toujours), `security` et `visual_qa` (si requis), `rework` (retour vers Bamse sur `CORRECTIONS NÉCESSAIRES`, sauf `build.txt` plus récent). Étapes inconnues ou cassées : signalées et ignorées, jamais devinées. `tunda sayrhazi` affiche les agents requis, manuels et inactifs de la configuration.
 
 Modes utiles : `--check` (valide la config sans surveiller), `--once` (une seule vérification, exit `0` si déclenché), `--timeout SEC`.
 

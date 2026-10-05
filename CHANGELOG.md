@@ -1,5 +1,11 @@
 # Changelog Sayrhazi
 
+## 0.8.0 — 2026-10-05
+
+- Lot 5 conditions : `security` et `visual_qa` automatiques sous condition (`security_required`, `visual_qa_required` lus dans `sayrhazi.yaml`, sécurité vraie par défaut), nouvelle étape `rework` (retour vers Bamse sur `CORRECTIONS NÉCESSAIRES`, sans rappel si `build.txt` plus récent), Ali toujours manuel (`design_required` ajouté au schéma et au modèle, défaut faux). Nouveau `summarize_agents()` + section « agents requis » dans `tunda` (requis / manuel / inactif). 4 nouveaux tests (`TestConditions`).
+- Verrou durci : heartbeat (jamais périmé à tort pendant un long run), purge du périmé seulement si PID mort (vérifié sans `os.kill`, bloquant sur Windows), `release` limité à son propre PID.
+- BOM UTF-8 toléré partout (cas Sarhi : `review.txt` avec BOM rendait son `task_id` invisible au watcher qui relançait Hadji) : `watch-work.py`, `engine/report.py`, `engine/workflow.py`, `engine/sayrhazi_config.py`. 2 nouveaux tests BOM.
+
 ## 0.7.0 — 2026-10-04
 
 - Lot 4 watcher généralisé : `watch-work.py` devenu moteur piloté par `workflow.yaml` (étapes `auto: true`, conditions depuis `sayrhazi.yaml`, garde sortie-existante généralisée, verrou d'instance, journal `workflow-log.md`, état minimal compatible `engine/state.py`, repli historique sans config). Déclenchement générique par rôle, `eligible_transitions()` pure et testée. 4 nouveaux tests (`TestWatcherEngine`), produit du nom conservé pour compatibilité.

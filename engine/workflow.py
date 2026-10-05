@@ -177,6 +177,7 @@ def _parse_list(items: list, pos: int, indent: int) -> tuple[list, int]:
 
 def parse_workflow(text: str) -> tuple[dict | None, str | None]:
     """Retourne (donnees, None) ou (None, message_erreur)."""
+    text = text.lstrip("\ufeff")
     items: list = []
     for lineno, raw in enumerate(text.splitlines(), 1):
         head = raw[: len(raw) - len(raw.lstrip())]
@@ -274,3 +275,29 @@ def validate_workflow(data: dict) -> list[str]:
             if key not in ("id", "agent", "condition", "trigger", "auto"):
                 errors.append(f"{where} : cle inattendue `{key}`")
     return errors
+
+
+def summarize_agents(workflow_data: dict, conditions: dict) -> list:
+    """Agents requis par la config : [(id étape, agent, état), ...].
+
+    état : `requis` (auto sans condition ou condition vraie), `manuel`
+    (auto: false), `inactif (condition à false)` (auto + condition fausse).
+    """
+    rows: list = []
+    stages = workflow_data.get("stages") if isinstance(workflow_data, dict) else []
+    if not isinstance(stages, list):
+        return rows
+    for stage in stages:
+        if not isinstance(stage, dict):
+            continue
+        sid = stage.get("id", "?")
+        agent = stage.get("agent", "?")
+        if not stage.get("auto", False):
+            rows.append((sid, agent, "manuel"))
+        elif not stage.get("condition"):
+            rows.append((sid, agent, "requis"))
+        elif conditions.get(stage["condition"], False):
+            rows.append((sid, agent, "requis"))
+        else:
+            rows.append((sid, agent, f"inactif ({stage['condition']} à false)"))
+    return rows
