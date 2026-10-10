@@ -713,5 +713,207 @@ class TestState(unittest.TestCase):
             self.assertIsNone(load_state(tmp))
 
 
+class TestSession(unittest.TestCase):
+    @classmethod
+    def _watcher(cls):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "watch_work", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_parse_model_id(self):
+        w = self._watcher()
+        self.assertEqual(w.parse_model_id('{"id":"muse-spark-1.3","providerID":"opencode"}'),
+                         "muse-spark-1.3")
+        self.assertEqual(w.parse_model_id("opencode/gpt-x"), "opencode/gpt-x")
+        self.assertEqual(w.parse_model_id("{pas json"), "")
+        self.assertEqual(w.parse_model_id(None), "")
+
+    def test_short_model(self):
+        w = self._watcher()
+        self.assertEqual(w.short_model("opencode/muse-spark-1.3-contributor-free"),
+                         "muse-spark-1.3-contributor")
+        self.assertEqual(w.short_model("plain"), "plain")
+        self.assertEqual(w.short_model(""), "")
+
+    def test_context_limit(self):
+        w = self._watcher()
+        self.assertEqual(w.context_limit("muse-spark-1.3-contributor-free", 123), 1048576)
+        self.assertEqual(w.context_limit("inconnu", 123), 123)
+        self.assertEqual(w.context_limit("inconnu", 0), w.SESSION_DEFAULT_LIMIT)
+
+    def test_session_usage(self):
+        w = self._watcher()
+        row = {"tokens_input": 1000, "tokens_cache_read": 500000, "tokens_cache_write": 0,
+               "tokens_output": 500}
+        base = {"baseline_input": 0, "baseline_cache": 0, "baseline_cache_write": 0,
+                "baseline_output": 0}
+        # Les relectures de cache ne comptent pas : (1000 + 500) / 10000.
+        self.assertAlmostEqual(w.session_usage(row, base, 10000), 0.15)
+        grown = {"baseline_input": 1000, "baseline_cache": 0, "baseline_cache_write": 0,
+                 "baseline_output": 500}
+        self.assertEqual(w.session_usage(row, grown, 10000), 0.0)
+        self.assertEqual(w.session_usage({}, base, 10000), 0.0)
+        self.assertEqual(w.session_usage(row, base, 0), 0.0)
+
+    def test_should_rotate(self):
+        w = self._watcher()
+        self.assertTrue(w.should_rotate(0.95, 0.95, None, None))
+        self.assertTrue(w.should_rotate(0.99, 0.95, None, None))
+        self.assertFalse(w.should_rotate(0.42, 0.95, None, None))
+        self.assertTrue(w.should_rotate(0.1, 0.95, 123, None))
+        self.assertFalse(w.should_rotate(0.1, 0.95, 123, 123))
+
+    def test_short_session(self):
+        w = self._watcher()
+        self.assertEqual(w.short_session("ses_eda5d12345"), "eda5d1")
+        self.assertEqual(w.short_session(""), "?")
+
+    def test_style_plain_sans_couleur(self):
+        w = self._watcher()
+        import os
+        old = os.environ.get("NO_COLOR")
+        os.environ["NO_COLOR"] = "1"
+        try:
+            self.assertEqual(w.style_line("ERREUR sur hadji FEATURE-003 à 42 %"),
+                             "ERREUR sur hadji FEATURE-003 à 42 %")
+            self.assertEqual(w.strip_ansi("\x1b[31mERREUR\x1b[0m"), "ERREUR")
+        finally:
+            if old is None:
+                del os.environ["NO_COLOR"]
+            else:
+                os.environ["NO_COLOR"] = old
+
+    def test_agent_model(self):
+        w = self._watcher()
+        with tempfile.TemporaryDirectory() as tmp:
+            from pathlib import Path as _Path
+            agent = _Path(tmp) / ".opencode" / "agent"
+            agent.mkdir(parents=True)
+            (agent / "hadji.md").write_text("---\nmodel: opencode/muse-spark-1.3\n---\n", encoding="utf-8")
+            full, short = w.agent_model(_Path(tmp), "hadji")
+            self.assertEqual(full, "opencode/muse-spark-1.3")
+            self.assertEqual(short, "muse-spark-1.3")
+            self.assertEqual(w.agent_model(_Path(tmp), "absent"), ("", ""))
+
+    def test_read_session_config(self):
+        w = self._watcher()
+        with tempfile.TemporaryDirectory() as tmp:
+            from pathlib import Path as _Path
+            root = _Path(tmp)
+            self.assertEqual(w.read_session_config(root), (0.95, 1048576))
+            cfg = root / ".opencode"
+            cfg.mkdir()
+            (cfg / "sayrhazi.yaml").write_text("session:\n  max_usage: 0.9\n  default_limit: 500\n",
+                                               encoding="utf-8")
+            self.assertEqual(w.read_session_config(root), (0.9, 500))
+            (cfg / "sayrhazi.yaml").write_text("session:\n  max_usage: 7\n", encoding="utf-8")
+            self.assertEqual(w.read_session_config(root), (0.95, 1048576))
+
+    def test_session_state_roundtrip(self):
+        w = self._watcher()
+        with tempfile.TemporaryDirectory() as tmp:
+            from pathlib import Path as _Path
+            root = _Path(tmp)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            self.assertEqual(w.get_session_state(root, "F-1"), {})
+            session = {"id": "ses_abc", "baseline_input": 10, "baseline_cache": 20,
+                       "baseline_output": 30, "compacted_at": "", "model": "m"}
+            w.set_session_state(root, "F-1", session)
+            self.assertEqual(w.get_session_state(root, "F-1")["id"], "ses_abc")
+            self.assertEqual(w.get_session_state(root, "AUTRE"), {})
+            text = (root / ".opencode" / "state" / "workflow-state.yaml").read_text(encoding="utf-8")
+            self.assertIn("  session:", text)
+            w.clear_session_state(root, "F-1")
+            self.assertEqual(w.get_session_state(root, "F-1").get("id"), "")
+
+    def test_adopt_session_premier_gagne(self):
+        w = self._watcher()
+        with tempfile.TemporaryDirectory() as tmp:
+            from pathlib import Path as _Path
+            root = _Path(tmp)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
+            row_a = {"id": "ses_a", "tokens_input": 1, "tokens_output": 2,
+                     "tokens_cache_read": 3, "tokens_cache_write": 0,
+                     "time_compacting": None, "model": "m"}
+            row_b = dict(row_a, id="ses_b")
+            self.assertTrue(w.adopt_session_if_absent(root, "F-1", row_a))
+            self.assertFalse(w.adopt_session_if_absent(root, "F-1", row_b))
+            self.assertEqual(w.get_session_state(root, "F-1")["id"], "ses_a")
+            self.assertFalse(w.adopt_session_if_absent(root, "AUTRE", row_b))
+
+    def test_log_startup_session_sans_etat(self):
+        w = self._watcher()
+        with tempfile.TemporaryDirectory() as tmp:
+            from pathlib import Path as _Path
+            import io
+            import sys
+            buf = io.StringIO()
+            old = sys.stdout
+            sys.stdout = buf
+            try:
+                w.log_startup_session(_Path(tmp))
+            finally:
+                sys.stdout = old
+            self.assertIn("session : aucune", buf.getvalue())
+
+    def test_observe_session_relit_etat_frais(self):
+        w = self._watcher()
+        import sqlite3
+        import tempfile
+        from pathlib import Path as _Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _Path(tmp)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            (root / ".opencode" / "history").mkdir(parents=True)
+            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
+            adopted = {"id": "ses_aaa111", "baseline_input": 100, "baseline_cache": 0,
+                       "baseline_cache_write": 0, "baseline_output": 50,
+                       "compacted_at": "", "model": "m"}
+            w.set_session_state(root, "F-1", adopted)
+            db = _Path(tmp) / "opencode.db"
+            conn = sqlite3.connect(str(db))
+            conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
+                         " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
+                         " time_created INT, time_compacting INT, directory TEXT)")
+            conn.execute("INSERT INTO session VALUES ('ses_aaa111', 200, 100, 999999, 0, 'm', 10, NULL, 'C:/P')")
+            conn.execute("INSERT INTO session VALUES ('ses_bbb222', 5, 5, 5, 0, 'm', 9999, NULL, 'C:/P')")
+            conn.commit()
+            conn.close()
+            real_db = w.opencode_db_path
+            w.opencode_db_path = lambda: db
+            try:
+                # Snapshot de déclenchement vide + autre session plus récente :
+                # l'observation doit suivre la session adoptée (ses_aaa111), pas ses_bbb222.
+                w._observe_session(root, "F-1", "", {}, 0.95, 1048576, 0)
+            finally:
+                w.opencode_db_path = real_db
+            log = (root / ".opencode" / "history" / "workflow-log.md").read_text(encoding="utf-8")
+            self.assertIn(w.short_session("ses_aaa111"), log)
+            self.assertNotIn(w.short_session("ses_bbb222"), log)
+            self.assertEqual(w.get_session_state(root, "F-1")["id"], "ses_aaa111")
+
+    def test_query_session_sqlite(self):
+        w = self._watcher()
+        import sqlite3
+        import tempfile
+        from pathlib import Path as _Path
+        db = _Path(tempfile.mkdtemp()) / "opencode.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
+                     " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
+                     " time_created INT, time_compacting INT, directory TEXT)")
+        conn.execute("INSERT INTO session VALUES ('ses_x', 10, 20, 30, 0, 'm', 999, NULL, 'C:/P')")
+        conn.commit()
+        conn.close()
+        row = w.query_session(db, "C:\\P", 500)
+        self.assertEqual(row["id"], "ses_x")
+        self.assertIsNone(w.query_session(db, "C:\\P", 1000))
+        self.assertIsNone(w.query_session(_Path(tempfile.mkdtemp()) / "absent.db", "C:/P", 0))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

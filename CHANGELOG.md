@@ -1,5 +1,11 @@
 # Changelog Sayrhazi
 
+## 0.11.0 — 2026-10-06
+
+- Bannière `info sayrhazi` en bleu `#269CD8` (ANSI truecolor, terminal uniquement, sorties redirigées inchangées).
+- Sessions OpenCode partagées : une session par tâche (`--session`, persistée dans `workflow-state.yaml`), usage réel lu dans la base locale (contenus nouveaux `input + output + cache_write` depuis l'adoption, relectures de cache exclues ; fenêtre 1 048 576 pour Muse Spark), rotation à `session.max_usage` (défaut 0.95, configurable) ou après compaction, adoption unique en vague parallèle, nouvel essai unique si l'id est inconnu. Console colorée (horodatage vert, agents, `task_id`, usage, erreurs) avec modèle affiché par agent ; lisibilité : vague de déclenchements encadrée (`#`) et sortie de chaque agent encadrée (`AGENT · … / FIN · …`), respiration par lignes vides, session reprise affichée au démarrage ; journal en texte brut. 14 nouveaux tests (`TestSession`).
+- Dossier `.opencode/backup/` dédié aux backups de config horodatés (créé par install/update, `history/` réservé aux journaux ; anciens backups laissés en place). 1 nouveau test d'intégration.
+
 ## 0.10.1 — 2026-10-05
 
 - Classification des échecs dans le watcher : quota/rate limit => messages explicites et aucun retry automatique (jamais de boucle de quota) ; réseau/timeout => retry avec backoff (30s, 90s, 270s, max 3) ; autres erreurs => échec normal journalisé. Message final explicite pour chaque catégorie.

@@ -1,5 +1,7 @@
 # Lot 6 — Parallélisation et convergence (brouillon local, non suivi)
 
+> **Statut :** clos (v0.9.0)
+
 Source : `Idee-Automation-Sayrhazi.md` §7. Après stabilisation Lots 4-5.
 
 ```text

@@ -22,7 +22,7 @@ def main() -> int:
 
     root = Path(__file__).resolve().parent.parent.parent
     info = resolve(Path(args.project).resolve(), root)
-    print(banner("info sayrhazi"))
+    print(banner("info sayrhazi", color=sys.stdout.isatty()))
     print("noyau : " + (info["latest"] or "(inconnu)"))
     print("adaptateurs : " + ", ".join(sorted(p.stem for p in (root / "runtimes" / "opencode" / "agents").glob("*.md"))))
     print("projet : " + str(Path(args.project).resolve()))

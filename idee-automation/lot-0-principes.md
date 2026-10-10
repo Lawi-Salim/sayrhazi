@@ -1,5 +1,7 @@
 # Lot 0 — Principes (brouillon local, non suivi)
 
+> **Statut :** clos (d�cision doc)
+
 Source : `Idee-Automation-Sayrhazi.md` §3 + §11. Zéro code : décisions à valider.
 
 ## 0.1 Automatiser les transitions, pas les décisions métier

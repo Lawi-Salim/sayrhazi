@@ -50,6 +50,22 @@ class TestIntegration(unittest.TestCase):
             install_project(project, ROOT)
             self.assertTrue((project / ".opencode" / "state").is_dir())
 
+    def test_backup_dir_et_destination(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            install_project(project, ROOT)
+            self.assertTrue((project / ".opencode" / "backup").is_dir())
+            cfg = project / ".opencode" / "sayrhazi.yaml"
+            text = cfg.read_text(encoding="utf-8")
+            text = text.replace("  designer: Ali\n", "")
+            cfg.write_text(text, encoding="utf-8")
+            added, backup, _warns = migrate_config(
+                cfg, ROOT / "runtimes" / "opencode" / "templates" / "sayrhazi.yaml",
+                project / ".opencode" / "backup")
+            self.assertIsNotNone(backup)
+            self.assertTrue(str(backup).replace("\\", "/").startswith(
+                str(project / ".opencode" / "backup").replace("\\", "/")))
+
     def test_workflow_cree_jamais_ecrase(self):
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)

@@ -21,7 +21,8 @@ $directories = @(
     (Join-Path $opencode 'resume'),
     (Join-Path $opencode 'history'),
     (Join-Path $opencode 'features'),
-    (Join-Path $opencode 'state')
+    (Join-Path $opencode 'state'),
+    (Join-Path $opencode 'backup')
 )
 
 foreach ($directory in $directories) {

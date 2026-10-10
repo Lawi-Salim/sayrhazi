@@ -3,7 +3,7 @@
 
 Copie les fichiers pilotes par le noyau (agent/*.md, watch-work.py) avec
 ecrasement. Migre `.opencode/sayrhazi.yaml` en douceur : cles manquantes du
-template ajoutees (avec backup horodate dans history/), valeurs existantes
+template ajoutees (avec backup horodate dans backup/), valeurs existantes
 jamais ecrasees, ligne `version:` alignee sur le noyau. Preserve le reste
 (opencode.json, AGENTS.md, resume/, history/, features/). Signale les
 agent/*.md orphelins.
@@ -142,7 +142,7 @@ def main() -> int:
     tmpl_yaml = core / "runtimes" / "opencode" / "templates" / "sayrhazi.yaml"
     latest = read_version(tmpl_yaml) or "(inconnue)"
 
-    for d in ("agent", "resume", "history", "features", "state"):
+    for d in ("agent", "resume", "history", "features", "state", "backup"):
         (opencode / d).mkdir(parents=True, exist_ok=True)
 
     updated = 0
@@ -167,7 +167,7 @@ def main() -> int:
     print(f"Sayrhazi mis a jour : version projet={before} -> noyau={latest} (rapports et historique preserves).")
     print(f"Fichiers noyau recopies : {updated}.")
 
-    added, backup, mwarns = migrate_config(opencode / "sayrhazi.yaml", tmpl_yaml, opencode / "history")
+    added, backup, mwarns = migrate_config(opencode / "sayrhazi.yaml", tmpl_yaml, opencode / "backup")
     if backup:
         print(f"Config migree (backup: {backup}) :")
         for a in added:

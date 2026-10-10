@@ -1,5 +1,7 @@
 # Lot 3 — État persistant et reprise (brouillon local, non suivi)
 
+> **Statut :** clos (v0.6.0)
+
 Source : `Idee-Automation-Sayrhazi.md` §6. Dépend des Lots 1-2. Résout : « Hadji oublié après une nuit ».
 
 ## 3.1 `.opencode/state/workflow-state.yaml`
@@ -34,3 +36,7 @@ Vue de coordination ; les rapports restent les preuves détaillées. Distinguer 
 ## Impacts noyau à prévoir
 
 Nouveau dossier `.opencode/state/` : install (créer), `.gitignore` (état local = ignorer ? à trancher : reprise multi-postes vs bruit git), tunda (présence non bloquante).
+
+## Critère de sortie
+
+`.opencode/state/workflow-state.yaml` écrit et réconcilié (`engine/state.py --reconcile` en 7 points), une étape terminée jamais relancée (sauf retour `CORRECTIONS NÉCESSAIRES`), incohérences signalées, `tunda`/`checker` en WARN. Livré (v0.6.0).

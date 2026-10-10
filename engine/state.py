@@ -60,7 +60,11 @@ def default_state(task_id: str) -> dict:
                          "started_at": None,
                          "current_stages": [], "completed_stages": [],
                          "pending_stages": [], "blocked_stages": [],
-                         "running_agents": []}}
+                         "running_agents": [],
+                         "session": {"id": "", "baseline_input": 0,
+                                     "baseline_cache": 0, "baseline_cache_write": 0,
+                                     "baseline_output": 0,
+                                     "compacted_at": None, "model": ""}}}
 
 
 def _scalar(value) -> str:
@@ -131,6 +135,9 @@ def validate_state(state: dict) -> list[str]:
                 "blocked_stages", "running_agents"):
         if not isinstance(wf.get(key), list):
             errors.append(f"workflow.{key} doit être une liste")
+    session = wf.get("session")
+    if session is not None and not isinstance(session, dict):
+        errors.append("workflow.session doit être un mapping")
     return errors
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Installer Sayrhazi — port Python de Install-Sayrhazi.ps1 (multi-plateforme).
 
-Cree .opencode/agent|resume|history|features, recopie agents + watcher
+Cree .opencode/agent|resume|history|features|state|backup, recopie agents + watcher
 (Force), cree AGENTS.md / sayrhazi.yaml / opencode.json uniquement si
 absents. Ne supprime ni ne remplace rapports, historiques ou config.
 
@@ -20,7 +20,7 @@ def install_project(project: Path, core: Path) -> None:
     opencode = project / ".opencode"
     agent_target = opencode / "agent"
     for d in (agent_target, opencode / "resume", opencode / "history", opencode / "features",
-              opencode / "state"):
+              opencode / "state", opencode / "backup"):
         d.mkdir(parents=True, exist_ok=True)
 
     adapter_agents = core / "runtimes" / "opencode" / "agents"
