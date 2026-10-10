@@ -28,6 +28,7 @@ Usage :
 import argparse
 import concurrent.futures
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -74,7 +75,227 @@ STATUS_RE = re.compile(r"^\s*status\s*:\s*(\S.*?)\s*$", re.MULTILINE | re.IGNORE
 
 
 def log(message: str) -> None:
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {message}", flush=True)
+    stamp = paint(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]", "green")
+    print(f"{stamp} {style_line(message)}", flush=True)
+
+
+# --- Sessions OpenCode : une session par tâche, rotation à seuil ---
+#
+# Le watcher réutilise une seule session par tâche (`--session`) au lieu
+# d'en ouvrir une neuve à chaque appel. Après chaque run, il lit l'usage
+# réel dans la base locale d'OpenCode et bascule vers une session neuve
+# quand le seuil est atteint (défaut 95 %, configurable). Les couleurs ne
+# touchent que la console : le journal reste en texte brut.
+
+SESSION_DB_PARTS = (".local", "share", "opencode", "opencode.db")
+SESSION_DEFAULT_MAX_USAGE = 0.95
+SESSION_DEFAULT_LIMIT = 1048576
+MODEL_CONTEXT = {"muse-spark": 1048576}
+
+ANSI_COLORS = {"reset": "\x1b[0m", "cyan": "\x1b[36m", "yellow": "\x1b[33m",
+               "green": "\x1b[32m", "red": "\x1b[31m", "magenta": "\x1b[35m"}
+
+TASK_HL_RE = re.compile(r"\b[A-Z]+-\d[\d-]*")
+PCT_RE = re.compile(r"\b\d{1,3}\s?%")
+
+
+def _color_enabled() -> bool:
+    """Couleurs console uniquement (jamais journal, jamais sortie redirigée)."""
+    if os.environ.get("NO_COLOR") is not None:
+        return False
+    if os.environ.get("TERM", "") == "dumb":
+        return False
+    try:
+        return sys.stdout.isatty()
+    except Exception:
+        return False
+
+
+def paint(text: str, color: str) -> str:
+    """Colore un fragment pour la console (texte brut si couleurs coupées)."""
+    if not _color_enabled() or color not in ANSI_COLORS:
+        return text
+    return ANSI_COLORS[color] + text + ANSI_COLORS["reset"]
+
+
+def strip_ansi(text: str) -> str:
+    """Retire les séquences ANSI (garde-fou journal)."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text or "")
+
+
+ANSI_SPLIT_RE = re.compile(r"(\x1b\[[0-9;]*m)")
+
+
+def _style_plain(text: str) -> str:
+    """Peinture d'un fragment sans séquence ANSI (agents, task_id, %, alertes)."""
+    styled = re.sub(r"\bERREUR\b", paint("ERREUR", "red"), text)
+    styled = re.sub(r"\bATTENTION\b", paint("ATTENTION", "yellow"), styled)
+    for name in sorted(set(ROLE_AGENT_FILE.values()), key=len, reverse=True):
+        styled = re.sub(r"\b" + re.escape(name) + r"\b", paint(name, "cyan"), styled)
+    styled = TASK_HL_RE.sub(lambda m: paint(m.group(0), "yellow"), styled)
+    styled = PCT_RE.sub(lambda m: paint(m.group(0), "green"), styled)
+    return styled
+
+
+def style_line(message: str) -> str:
+    """Mots importants d'une ligne console ; segments déjà colorés intacts."""
+    if not _color_enabled():
+        return message
+    parts = ANSI_SPLIT_RE.split(message or "")
+    for i in range(0, len(parts), 2):
+        parts[i] = _style_plain(parts[i])
+    return "".join(parts)
+
+
+def parse_model_id(raw) -> str:
+    """Id de modèle depuis la colonne `model` (JSON) ou une chaîne simple."""
+    text = str(raw or "").strip()
+    if text.startswith("{"):
+        try:
+            return str(json.loads(text).get("id", "") or "")
+        except (ValueError, AttributeError):
+            return ""
+    return text
+
+
+def short_model(model_id: str) -> str:
+    """Nom court d'affichage (suffixe provider retiré, `-free` allégé)."""
+    short = (model_id or "").split("/")[-1]
+    if short.endswith("-free"):
+        short = short[: -len("-free")]
+    return short
+
+
+def context_limit(model_id: str, default: int) -> int:
+    """Fenêtre de contexte connue du modèle, sinon repli configuré."""
+    low = (model_id or "").lower()
+    for key, size in MODEL_CONTEXT.items():
+        if key in low:
+            return size
+    return default if isinstance(default, int) and default > 0 else SESSION_DEFAULT_LIMIT
+
+
+def session_usage(row: dict, baseline: dict, limit: int) -> float:
+    """Part de contexte consommée depuis l'adoption (0.0 à >1.0).
+
+    row : compteurs cumulés lus dans la base ; baseline : compteurs à
+    l'adoption de la session ; limit : fenêtre du modèle. Seuls les
+    contenus nouveaux comptent (input + output + cache_write) : les
+    relectures de cache (`tokens_cache_read`) gonflent vite en cumulé
+    sans occuper plus de contexte, elles sont donc exclues.
+    """
+    if not row or not isinstance(limit, int) or limit <= 0:
+        return 0.0
+
+    def _num(value) -> int:
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    used = ((_num(row.get("tokens_input")) - _num((baseline or {}).get("baseline_input")))
+            + (_num(row.get("tokens_output")) - _num((baseline or {}).get("baseline_output")))
+            + (_num(row.get("tokens_cache_write")) - _num((baseline or {}).get("baseline_cache_write", 0))))
+    return max(0.0, used / limit)
+
+
+def should_rotate(usage: float, max_usage: float, compacted_now, compacted_before) -> bool:
+    """Bascule si le seuil est atteint ou si OpenCode a compacté entre-temps."""
+    try:
+        if float(usage) >= float(max_usage):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return (compacted_now is not None
+            and str(compacted_now) != str(compacted_before or ""))
+
+
+def short_session(session_id: str) -> str:
+    """Id court d'affichage (`ses_eda5d1...` -> `eda5d1`)."""
+    text = str(session_id or "")
+    if text.startswith("ses_"):
+        text = text[4:]
+    return text[:6] if text else "?"
+
+
+def read_session_config(project_root: Path) -> Tuple[float, int]:
+    """Lit `session.max_usage` / `session.default_limit` (défauts sinon)."""
+    max_usage, limit = SESSION_DEFAULT_MAX_USAGE, SESSION_DEFAULT_LIMIT
+    try:
+        text = (project_root / ".opencode" / "sayrhazi.yaml").read_text(
+            encoding="utf-8", errors="replace")
+    except OSError:
+        return max_usage, limit
+    match = re.search(r"max_usage\s*:\s*([0-9]+(?:\.[0-9]+)?)", text)
+    if match:
+        try:
+            value = float(match.group(1))
+            if 0.0 < value < 1.0:
+                max_usage = value
+        except ValueError:
+            pass
+    match = re.search(r"default_limit\s*:\s*(\d+)", text)
+    if match:
+        try:
+            value = int(match.group(1))
+            if value > 0:
+                limit = value
+        except ValueError:
+            pass
+    return max_usage, limit
+
+
+def agent_model(project_root: Path, agent_file: str) -> Tuple[str, str]:
+    """(modèle complet, modèle court) depuis le frontmatter de l'agent."""
+    try:
+        text = (project_root / ".opencode" / "agent" / (agent_file + ".md")).read_text(
+            encoding="utf-8", errors="replace")
+    except OSError:
+        return "", ""
+    match = re.search(r"^model\s*:\s*(\S+)", text, re.MULTILINE)
+    full = match.group(1).strip() if match else ""
+    return full, short_model(full)
+
+
+def opencode_db_path() -> Optional[Path]:
+    """Base locale d'OpenCode, ou None si absente (usage inconnu, sans rotation)."""
+    candidate = Path(os.path.expanduser("~")).joinpath(*SESSION_DB_PARTS)
+    return candidate if candidate.is_file() else None
+
+
+def _session_row(cursor, where: str, params: tuple) -> Optional[dict]:
+    cursor.execute("SELECT id, tokens_input, tokens_output, tokens_cache_read,"
+                   " tokens_cache_write, model, time_created, time_compacting"
+                   " FROM session WHERE " + where
+                   + " ORDER BY time_created DESC LIMIT 1", params)
+    found = cursor.fetchone()
+    if not found:
+        return None
+    keys = ("id", "tokens_input", "tokens_output", "tokens_cache_read",
+            "tokens_cache_write", "model", "time_created", "time_compacting")
+    return dict(zip(keys, found))
+
+
+def query_session(db_path: Path, directory: str, since_ms: int = 0,
+                  session_id: str = "") -> Optional[dict]:
+    """Ligne de session : par id si réutilisée, sinon la plus récente du projet.
+
+    Jamais bloquant : None si base absente, verrouillée ou schéma inattendu.
+    """
+    try:
+        import sqlite3
+        db = sqlite3.connect("file:" + str(db_path) + "?mode=ro", uri=True, timeout=5)
+        try:
+            cursor = db.cursor()
+            if session_id:
+                return _session_row(cursor, "id = ?", (session_id,))
+            norm = (directory or "").replace("\\", "/")
+            return _session_row(cursor, "directory = ? AND time_created >= ?",
+                                (norm, int(since_ms or 0)))
+        finally:
+            db.close()
+    except Exception:
+        return None
 
 
 TICK_SECONDS = 30
@@ -484,7 +705,10 @@ def journal(project_root: Path, message: str) -> None:
 
 
 STATE_KEYS = ("task_id", "status", "started_at", "current_stages", "completed_stages",
-              "pending_stages", "blocked_stages", "running_agents")
+              "pending_stages", "blocked_stages", "running_agents", "session")
+
+SESSION_STATE_KEYS = ("id", "baseline_input", "baseline_cache", "baseline_cache_write",
+                      "baseline_output", "compacted_at", "model")
 
 
 def _qscalar(value) -> str:
@@ -512,17 +736,37 @@ def _unquote(text: str) -> str:
 
 
 def read_state_minimal(project_root: Path) -> dict:
-    """Lit les 8 clefs connues de workflow-state.yaml (sans dépendance)."""
+    """Lit les clefs connues de workflow-state.yaml (sans dépendance).
+
+    Le bloc `session:` (sous-clefs à 4 espaces) est lu comme mapping ;
+    toute autre indentation est ignorée.
+    """
     path = project_root / ".opencode" / "state" / "workflow-state.yaml"
     data: dict = {}
     try:
         lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return data
-    for line in lines:
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         match = re.match(r"^\s{2}(\w+)\s*:\s*(.*)$", line)
         if match and match.group(1) in STATE_KEYS:
-            data[match.group(1)] = _unquote(match.group(2))
+            key = match.group(1)
+            if key == "session" and match.group(2).strip() == "":
+                session: dict = {}
+                i += 1
+                while i < len(lines):
+                    sub = re.match(r"^\s{4}(\w+)\s*:\s*(.*)$", lines[i])
+                    if not sub:
+                        break
+                    if sub.group(1) in SESSION_STATE_KEYS:
+                        session[sub.group(1)] = _unquote(sub.group(2))
+                    i += 1
+                data[key] = session
+                continue
+            data[key] = _unquote(match.group(2))
+        i += 1
     return data
 
 
@@ -546,6 +790,12 @@ def write_state_minimal(project_root: Path, values: dict) -> bool:
     lines = ["workflow:"]
     for key in STATE_KEYS:
         value = merged.get(key)
+        if key == "session":
+            lines.append("  session:")
+            session = value if isinstance(value, dict) else {}
+            for sub in SESSION_STATE_KEYS:
+                lines.append("    " + sub + ": " + _qscalar(session.get(sub)))
+            continue
         if key.endswith("_stages") or key == "running_agents":
             items = value if isinstance(value, list) else _flow_items(value or "[]")
             lines.append("  " + key + ": [" + ", ".join(_qscalar(x) for x in items) + "]")
@@ -602,6 +852,79 @@ def state_agents_remove(project_root: Path, task_id: str, agent: Optional[str]) 
         write_state_minimal(project_root, {"running_agents": running})
 
 
+def get_session_state(project_root: Path, task_id: str) -> dict:
+    """Bloc session de la tâche (vide si autre tâche ou absent)."""
+    with _SHARED_LOCK:
+        current = read_state_minimal(project_root)
+    if current.get("task_id") != task_id:
+        return {}
+    session = current.get("session")
+    return dict(session) if isinstance(session, dict) else {}
+
+
+def set_session_state(project_root: Path, task_id: str, session: dict) -> None:
+    """Persiste le bloc session de la tâche (thread-safe)."""
+    with _SHARED_LOCK:
+        write_state_minimal(project_root, {"task_id": task_id, "status": "IN_PROGRESS",
+                                           "session": dict(session)})
+
+
+def adopt_session_if_absent(project_root: Path, task_id: str, row: dict) -> bool:
+    """Adopte la session si aucune n'est persistée (vague parallèle : le 1er gagne)."""
+    with _SHARED_LOCK:
+        current = read_state_minimal(project_root)
+        if current.get("task_id") != task_id:
+            return False
+        sess = current.get("session")
+        if isinstance(sess, dict) and str(sess.get("id") or ""):
+            return False
+        write_state_minimal(project_root, {"task_id": task_id, "status": "IN_PROGRESS", "session": {
+            "id": row.get("id"), "baseline_input": row.get("tokens_input") or 0,
+            "baseline_cache": row.get("tokens_cache_read") or 0,
+            "baseline_cache_write": row.get("tokens_cache_write") or 0,
+            "baseline_output": row.get("tokens_output") or 0,
+            "compacted_at": row.get("time_compacting") or "",
+            "model": parse_model_id(row.get("model"))}})
+        return True
+
+
+def clear_session_state(project_root: Path, task_id: str) -> None:
+    """Oublie la session (rotation) sans toucher au reste de l'état."""
+    set_session_state(project_root, task_id, {key: ("" if key in ("id", "model") else 0)
+                                              if key != "compacted_at" else ""
+                                              for key in SESSION_STATE_KEYS})
+
+
+def session_line(row: Optional[dict], baseline: dict, limit: int) -> str:
+    """Ligne brute `session <id> · usage NN %` (journal, sans couleur)."""
+    if not row:
+        return "session inconnue (base OpenCode illisible)"
+    usage = session_usage(row, baseline, limit)
+    return f"session {short_session(row.get('id'))} · usage {usage * 100:.0f} %"
+
+
+def track_session(project_root: Path, task_id: str, row: Optional[dict],
+                  baseline: dict, limit: int, max_usage: float,
+                  adopted_compacted) -> None:
+    """Journalise l'usage et persiste/adopte/pivote la session (journal brut)."""
+    if not row:
+        journal(project_root, session_line(None, baseline, limit))
+        return
+    usage = session_usage(row, baseline, limit)
+    journal(project_root, session_line(row, baseline, limit))
+    if not str((baseline or {}).get("id") or ""):
+        if usage >= max_usage:
+            journal(project_root, f"session {short_session(row.get('id'))} non adoptée"
+                                  f" (déjà à {usage * 100:.0f} %)")
+            return
+        adopt_session_if_absent(project_root, task_id, row)
+        return
+    if should_rotate(usage, max_usage, row.get("time_compacting"), adopted_compacted):
+        clear_session_state(project_root, task_id)
+        journal(project_root, f"session {short_session(row.get('id'))} : rotation"
+                              f" (usage {usage * 100:.0f} %)")
+
+
 def max_parallel_agents(config: Optional[dict]) -> int:
     """Garde-fou machine (défaut 3)."""
     try:
@@ -648,6 +971,12 @@ def run_branches(project_root: Path, items: list, workers: int) -> tuple:
     """
     done: list = []
     failed: list = []
+    if items:
+        sids = sorted({(stage.get("id", "?") or "?") for _k, stage, _t, _w in items})
+        wave = f"vague : {', '.join(sids)} ({items[0][2]})"
+        print()
+        log("########## " + wave + " ##########")
+        journal(project_root, wave)
     if len(items) <= 1:
         for key, stage, task_id, why in items:
             log(f"État : {why}")
@@ -701,6 +1030,39 @@ def check_opencode_available() -> bool:
         return False
 
 
+def _observe_session(project_root: Path, task_id: str, reuse_id: str, adopted: dict,
+                   max_usage: float, default_limit: int, start_ms: int) -> None:
+    """Lit l'usage réel, l'affiche (console colorée, journal brut) et pivote si besoin.
+
+    L'état est relu ici (pas celui du déclenchement) : en vague parallèle,
+    une autre branche a pu adopter la session partagée entre-temps.
+    """
+    fresh = get_session_state(project_root, task_id)
+    if not isinstance(fresh, dict) or not fresh:
+        fresh = adopted if isinstance(adopted, dict) else {}
+    adopted_compacted = fresh.get("compacted_at")
+    db_path = opencode_db_path()
+    row = None
+    fresh_id = str(fresh.get("id") or "")
+    if db_path is not None:
+        if fresh_id:
+            row = query_session(db_path, "", 0, session_id=fresh_id)
+        elif reuse_id:
+            row = query_session(db_path, "", 0, session_id=reuse_id)
+        if row is None and not fresh_id:
+            row = query_session(db_path, str(project_root), start_ms)
+    limit = context_limit(parse_model_id((row or {}).get("model")), default_limit)
+    raw = session_line(row, fresh, limit)
+    usage = session_usage(row or {}, fresh, limit)
+    shown = raw
+    match = re.search(r"\d{1,3}\s?%", raw)
+    if match and usage >= max_usage and row:
+        shown = raw.replace(match.group(0), paint(match.group(0), "red"), 1)
+    log(shown)
+    track_session(project_root, task_id, row, fresh, limit, max_usage,
+                  fresh.get("compacted_at"))
+
+
 def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, str]:
     """Déclenche l'agent d'une étape et vérifie son rapport de sortie. (ok, kind)."""
     agent = (stage.get("agent") or "").strip().lower()
@@ -709,8 +1071,17 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, 
     trigger = stage.get("trigger") or {}
     prompt = AGENT_PROMPTS.get(agent, "Sayrhazi task {task} : avance l'étape " + str(stage.get("id", "?")))
     prompt = prompt.format(task=task_id)
-    log(f"{trigger.get('report')} {trigger.get('status')} ({task_id}) -> appel de {agent_file}...")
+    full_model, model_short = agent_model(project_root, agent_file)
+    max_usage, default_limit = read_session_config(project_root)
+    adopted = get_session_state(project_root, task_id)
+    reuse_id = str(adopted.get("id") or "") if adopted.get("id") else ""
+    call = f"{trigger.get('report')} {trigger.get('status')} ({task_id}) -> appel de {agent_file}"
+    if model_short:
+        call += f" [{model_short}]"
+        journal(project_root, call + f" (modèle {full_model})")
+    log(call + "...")
     start = time.time()
+    start_ms = int(start * 1000)
     stop_tick = threading.Event()
 
     def tick() -> None:
@@ -720,12 +1091,31 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, 
 
     ticker = threading.Thread(target=tick, daemon=True)
     ticker.start()
-    try:
+
+    def _invoke(session_id: str):
+        base = ["opencode", "run", "--agent", agent_file]
+        if session_id:
+            base += ["--session", session_id]
         if IS_WINDOWS:
-            command_str = f'opencode run --agent {agent_file} "{prompt}"'
-            result = subprocess.run(command_str, cwd=str(project_root), capture_output=True, text=True, shell=True, timeout=600, encoding="utf-8", errors="replace")
-        else:
-            result = subprocess.run(["opencode", "run", "--agent", agent_file, prompt], cwd=str(project_root), capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
+            parts = base + [prompt]
+            command_str = " ".join(f'"{p}"' if " " in p else p for p in parts)
+            return subprocess.run(command_str, cwd=str(project_root), capture_output=True, text=True, shell=True, timeout=600, encoding="utf-8", errors="replace")
+        return subprocess.run(base + [prompt], cwd=str(project_root), capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
+
+    def _session_dead(output_text: str) -> bool:
+        low = (output_text or "").lower()
+        return "session" in low and any(k in low for k in ("not found", "introuvable", "invalid", "unknown"))
+
+    try:
+        result = _invoke(reuse_id)
+        if result.returncode != 0 and reuse_id:
+            combined = str(getattr(result, "stdout", "") or "") + str(getattr(result, "stderr", "") or "")
+            if _session_dead(combined):
+                clear_session_state(project_root, task_id)
+                journal(project_root, f"session {short_session(reuse_id)} inconnue d'OpenCode : reprise sans session")
+                log(f"session {short_session(reuse_id)} inconnue : nouvel appel sans session...")
+                reuse_id = ""
+                result = _invoke("")
     except FileNotFoundError:
         log("ERREUR : commande 'opencode' introuvable.")
         return False, "opencode_missing"
@@ -739,7 +1129,13 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, 
         stop_tick.set()
         ticker.join()
     if result.stdout:
-        print(result.stdout)
+        print()
+        log(f"============ AGENT · {agent_file} ============")
+        sys.stdout.write(result.stdout + ("" if result.stdout.endswith("\n") else "\n"))
+        sys.stdout.flush()
+        log(f"============ FIN · {agent_file} ============")
+        print()
+    _observe_session(project_root, task_id, reuse_id, adopted, max_usage, default_limit, start_ms)
     if result.returncode != 0:
         log(f"opencode erreur {result.returncode} :")
         if result.stderr:
@@ -880,10 +1276,34 @@ def watched_reports(usable: list) -> list:
     return sorted(names)
 
 
+def log_startup_session(project_root: Path) -> None:
+    """Affiche la session reprise au démarrage (ou son absence)."""
+    state = read_state_minimal(project_root)
+    task_id = str(state.get("task_id") or "")
+    sess = state.get("session")
+    sess = dict(sess) if isinstance(sess, dict) else {}
+    sid = str(sess.get("id") or "")
+    if not task_id or not sid:
+        log("session : aucune (nouvelle au prochain appel)")
+        return
+    max_usage, default_limit = read_session_config(project_root)
+    db_path = opencode_db_path()
+    row = query_session(db_path, "", 0, session_id=sid) if db_path is not None else None
+    limit = context_limit(parse_model_id((row or {}).get("model")), default_limit)
+    usage = session_usage(row or {}, sess, limit)
+    raw = session_line(row, sess, limit) + f" (reprise, {task_id})"
+    match = re.search(r"\d{1,3}\s?%", raw)
+    shown = raw
+    if match and usage >= max_usage and row:
+        shown = raw.replace(match.group(0), paint(match.group(0), "red"), 1)
+    log(shown)
+
+
 def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
     """Boucle moteur : toute transition déclarée et éligible est déclenchée."""
     watched = watched_reports(usable)
     log("Surveillance de : " + ", ".join(str(root / ".opencode" / "resume" / name) for name in watched))
+    log_startup_session(root)
     resume = root / ".opencode" / "resume"
     last_keys: set = set()
     last_hashes: dict = {}

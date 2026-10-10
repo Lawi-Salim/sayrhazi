@@ -1,5 +1,7 @@
 # Lot 1 — Contrats et données minimales (brouillon local, non suivi)
 
+> **Statut :** clos (v0.4.0)
+
 Source : `Idee-Automation-Sayrhazi.md` §4. Fondation prioritaire : sans contrats stables, aucun moteur ne distingue un nouveau rapport d'un ancien fichier.
 
 ## 1.1 `task_id` obligatoire (à trancher : format)

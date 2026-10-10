@@ -15,7 +15,7 @@ ADAPTER_ROOT="$SOURCE_ROOT/runtimes/opencode"
 
 OPENCODE_DIR="$PROJECT_PATH/.opencode"
 AGENT_DIR="$OPENCODE_DIR/agent"
-mkdir -p "$AGENT_DIR" "$OPENCODE_DIR/resume" "$OPENCODE_DIR/history" "$OPENCODE_DIR/features" "$OPENCODE_DIR/state"
+mkdir -p "$AGENT_DIR" "$OPENCODE_DIR/resume" "$OPENCODE_DIR/history" "$OPENCODE_DIR/features" "$OPENCODE_DIR/state" "$OPENCODE_DIR/backup"
 
 # Les agents sont fournis par Sayrhazi et peuvent être mis à jour.
 cp "$ADAPTER_ROOT"/agents/*.md "$AGENT_DIR/"

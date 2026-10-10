@@ -37,7 +37,7 @@ chmod +x runtimes/opencode/scripts/install-sayrhazi.sh
 
 ## Ce que fait l'installation
 
-Le script crée `.opencode/agent/`, `resume/`, `history/`, `features/` et `state/`, puis copie les six agents génériques et `watch-work.py` (mis à jour à chaque install). `.opencode/state/` (`workflow-state.yaml`, vue de coordination du Lot 3) est local à la machine : ajoutez-le au `.gitignore` du projet (la config `workflow.yaml` se versionne, l'état non). Il crée `AGENTS.md`, `sayrhazi.yaml` et `opencode.json` uniquement lorsqu'ils sont absents. Il ne supprime ni ne remplace les rapports, historiques, décisions ou configuration déjà présents.
+Le script crée `.opencode/agent/`, `resume/`, `history/`, `features/`, `state/` et `backup/`, puis copie les six agents génériques et `watch-work.py` (mis à jour à chaque install). `.opencode/state/` (`workflow-state.yaml`, vue de coordination du Lot 3) est local à la machine : ajoutez-le au `.gitignore` du projet (la config `workflow.yaml` se versionne, l'état non). Il crée `AGENTS.md`, `sayrhazi.yaml` et `opencode.json` uniquement lorsqu'ils sont absents. Il ne supprime ni ne remplace les rapports, historiques, décisions ou configuration déjà présents.
 
 Les fichiers d'agents sont les fichiers fournis par Sayrhazi et peuvent être actualisés par une future version. Pour un projet existant, effectuer un commit ou une sauvegarde avant toute mise à jour et relire les différences.
 
@@ -63,7 +63,7 @@ update sayrhazi
 
 Cela réinstalle agents + `watch-work.py` (mis à jour avec `-Force`), affiche `version projet -> noyau`, signale les fichiers `agent/*.md` inconnus du noyau (suppression manuelle), puis relance le check. Configuration, rapports, historiques, décisions et `AGENTS.md` ne sont jamais écrasés.
 
-Migration douce de la config : les clés manquantes du template sont ajoutées à `sayrhazi.yaml` (ex. nouvelle section `agents:`, `database:` legacy migrée vers `database_type/driver/name` avec reprise de l'ancien nom), backup horodaté dans `history/`, valeurs existantes et `version:` alignée sur le noyau. Vérifier les valeurs migrées après coup.
+Migration douce de la config : les clés manquantes du template sont ajoutées à `sayrhazi.yaml` (ex. nouvelle section `agents:`, `database:` legacy migrée vers `database_type/driver/name` avec reprise de l'ancien nom), backup horodaté dans `backup/` (les anciens backups restés dans `history/` ne sont pas déplacés), valeurs existantes et `version:` alignée sur le noyau. Vérifier les valeurs migrées après coup.
 
 ## Mise à jour prudente
 

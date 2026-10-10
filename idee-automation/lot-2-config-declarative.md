@@ -1,5 +1,7 @@
 # Lot 2 — Configuration déclarative (brouillon local, non suivi)
 
+> **Statut :** clos (v0.5.0)
+
 Source : `Idee-Automation-Sayrhazi.md` §5. Dépend du Lot 1.
 
 ## 2.1 `.opencode/workflow.yaml`
@@ -58,3 +60,7 @@ Hifadhui uniquement sur risque déclaré (conditions déclarées d'abord ; déte
 ## Impacts noyau à prévoir
 
 Nouveau fichier contrat : install (créer si absent), update (ne jamais écraser), tunda/validate (vérifier présence + validité), `.gitignore` (état ? la config se versionne, elle n'est pas ignorée), template + schéma.
+
+## Critère de sortie
+
+`.opencode/workflow.yaml` présent dans les projets, parsé et validé par `engine/workflow.py`, cohérent avec les statuts du Lot 1, install/update non destructifs, `tunda`/`checker` en WARN. Livré (v0.5.0).

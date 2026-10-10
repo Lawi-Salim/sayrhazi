@@ -2,7 +2,7 @@
 # Ce fichier décrit le projet courant ; il ne lance aucun service.
 workflow:
   name: Sayrhazi # Ne pas modifier
-  version: "0.10.1" # Ne pas modifier
+  version: "0.11.0" # Ne pas modifier
 
 project:
   name: A_COMPLETER # Renseigner le nom du projet
@@ -43,6 +43,14 @@ quality:
   visual_qa_required: false
   design_required: false
   required_checks: []
+
+session:
+  # Une seule session OpenCode par tâche, réutilisée à chaque appel.
+  # Bascule vers une session neuve quand l'usage atteint max_usage
+  # (0.95 = 95 %, marge pour écrire le rapport final).
+  max_usage: 0.95
+  # Fenêtre de contexte (tokens) si le modèle est inconnu.
+  default_limit: 1048576
 
 integration:
   docker_required: false

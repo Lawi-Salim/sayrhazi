@@ -1,5 +1,7 @@
 # Lot 4 — Watcher généralisé (brouillon local, non suivi)
 
+> **Statut :** clos (v0.7.0)
+
 Source : `Idee-Automation-Sayrhazi.md` §8 (étapes 5.1-5.4). Dépend des Lots 1-3.
 
 ## 4.1 Généraliser le déclenchement (garder `build.txt → Hadji`)
