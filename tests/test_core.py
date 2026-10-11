@@ -63,6 +63,16 @@ class TestRenderer(unittest.TestCase):
                 expected = (ROOT / "runtimes" / "opencode" / "agents" / (trio.name + ".md")).read_text(encoding="utf-8")
                 self.assertEqual(render_one(trio), expected, trio.name)
 
+    def test_lecture_frugale_partout(self):
+        agents = ("lawibrahim", "ali", "bamse", "hadji", "hifadhui", "zawadi")
+        for name in agents:
+            core = (ROOT / "core" / "agents" / name / "instructions.md").read_text(encoding="utf-8")
+            self.assertIn("## Lecture frugale", core, name)
+            self.assertIn("git status", core, name)
+            self.assertIn("Proportionne ton effort", core, name)
+            rendu = (ROOT / "runtimes" / "opencode" / "agents" / (name + ".md")).read_text(encoding="utf-8")
+            self.assertIn("## Lecture frugale", rendu, name)
+
 
 class TestReport(unittest.TestCase):
     def test_templates_valides(self):
@@ -768,7 +778,7 @@ class TestSession(unittest.TestCase):
 
     def test_short_session(self):
         w = self._watcher()
-        self.assertEqual(w.short_session("ses_eda5d12345"), "eda5d1")
+        self.assertEqual(w.short_session("ses_eda5d124effe8IJ2Bj3IWBAarY"), "eda5d124ef")
         self.assertEqual(w.short_session(""), "?")
 
     def test_style_plain_sans_couleur(self):
@@ -818,16 +828,18 @@ class TestSession(unittest.TestCase):
             from pathlib import Path as _Path
             root = _Path(tmp)
             (root / ".opencode" / "state").mkdir(parents=True)
-            self.assertEqual(w.get_session_state(root, "F-1"), {})
+            self.assertEqual(w.get_session_state(root, "F-1", "hadji"), {})
             session = {"id": "ses_abc", "baseline_input": 10, "baseline_cache": 20,
                        "baseline_output": 30, "compacted_at": "", "model": "m"}
-            w.set_session_state(root, "F-1", session)
-            self.assertEqual(w.get_session_state(root, "F-1")["id"], "ses_abc")
-            self.assertEqual(w.get_session_state(root, "AUTRE"), {})
+            w.set_session_state(root, "F-1", "hadji", session)
+            self.assertEqual(w.get_session_state(root, "F-1", "hadji")["id"], "ses_abc")
+            self.assertEqual(w.get_session_state(root, "F-1", "zawadi"), {})
+            self.assertEqual(w.get_session_state(root, "AUTRE", "hadji"), {})
             text = (root / ".opencode" / "state" / "workflow-state.yaml").read_text(encoding="utf-8")
             self.assertIn("  session:", text)
-            w.clear_session_state(root, "F-1")
-            self.assertEqual(w.get_session_state(root, "F-1").get("id"), "")
+            self.assertIn("    hadji:", text)
+            w.clear_session_state(root, "F-1", "hadji")
+            self.assertEqual(w.get_session_state(root, "F-1", "hadji"), {})
 
     def test_adopt_session_premier_gagne(self):
         w = self._watcher()
@@ -840,10 +852,84 @@ class TestSession(unittest.TestCase):
                      "tokens_cache_read": 3, "tokens_cache_write": 0,
                      "time_compacting": None, "model": "m"}
             row_b = dict(row_a, id="ses_b")
-            self.assertTrue(w.adopt_session_if_absent(root, "F-1", row_a))
-            self.assertFalse(w.adopt_session_if_absent(root, "F-1", row_b))
-            self.assertEqual(w.get_session_state(root, "F-1")["id"], "ses_a")
-            self.assertFalse(w.adopt_session_if_absent(root, "AUTRE", row_b))
+            self.assertTrue(w.adopt_session_if_absent(root, "F-1", "hadji", row_a))
+            self.assertFalse(w.adopt_session_if_absent(root, "F-1", "hadji", row_b))
+            self.assertEqual(w.get_session_state(root, "F-1", "hadji")["id"], "ses_a")
+            # Autre agent : adoption indépendante.
+            self.assertTrue(w.adopt_session_if_absent(root, "F-1", "zawadi", row_b))
+            self.assertEqual(w.get_session_state(root, "F-1", "zawadi")["id"], "ses_b")
+            self.assertFalse(w.adopt_session_if_absent(root, "AUTRE", "hadji", row_b))
+
+    def test_isolation_clause(self):
+        w = self._watcher()
+        for agent, own in (("builder", "build.txt"), ("reviewer", "review.txt"),
+                           ("security", "security.txt"), ("qa", "qa.txt"),
+                           ("designer", "design.txt")):
+            clause = w.isolation_clause(agent)
+            self.assertIn(own, clause)
+            for other in ("plan.txt", "design.txt", "build.txt", "review.txt",
+                          "security.txt", "qa.txt"):
+                if other != own:
+                    self.assertIn(other, clause)
+
+    def test_build_command(self):
+        w = self._watcher()
+        cmd = w.build_command("hadji", "fais X", "F-1", "ses_1", "opencode/m")
+        self.assertEqual(cmd[:4], ["opencode", "run", "--agent", "hadji"])
+        self.assertIn("--title", cmd)
+        self.assertIn("Sayrhazi F-1 hadji", cmd)
+        self.assertIn("--model", cmd)
+        self.assertIn("opencode/m", cmd)
+        self.assertIn("--session", cmd)
+        self.assertIn("ses_1", cmd)
+        self.assertEqual(cmd[-1], "fais X")
+        nu = w.build_command("hadji", "fais X", "F-1", "", "")
+        self.assertNotIn("--model", nu)
+        self.assertNotIn("--session", nu)
+
+    def test_changement_tache_reinitialise_sessions(self):
+        w = self._watcher()
+        with tempfile.TemporaryDirectory() as tmp:
+            from pathlib import Path as _Path
+            root = _Path(tmp)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
+            w.set_session_state(root, "F-1", "hadji", {"id": "ses_x", "model": "m"})
+            self.assertEqual(w.get_session_state(root, "F-1", "hadji")["id"], "ses_x")
+            w.state_agents_add(root, "F-2", "hadji")
+            self.assertEqual(w.get_session_state(root, "F-2", "hadji"), {})
+            self.assertEqual(w.read_state_minimal(root).get("task_id"), "F-2")
+
+    def test_output_verified(self):
+        w = self._watcher()
+        with tempfile.TemporaryDirectory() as tmp:
+            from pathlib import Path as _Path
+            resume = _Path(tmp) / ".opencode" / "resume"
+            resume.mkdir(parents=True)
+            self.assertTrue(w.output_verified(_Path(tmp), "", "F-1"))
+            self.assertFalse(w.output_verified(_Path(tmp), "qa.txt", "F-1"))
+            (resume / "qa.txt").write_text("task_id: F-1\nagent: qa\n", encoding="utf-8")
+            self.assertTrue(w.output_verified(_Path(tmp), "qa.txt", "F-1"))
+            self.assertFalse(w.output_verified(_Path(tmp), "qa.txt", "F-2"))
+
+    def test_format_tokens(self):
+        w = self._watcher()
+        self.assertEqual(w.format_tokens(12029), "12 029")
+        self.assertEqual(w.format_tokens(0), "0")
+        self.assertEqual(w.format_tokens(-5), "0")
+        self.assertEqual(w.format_tokens(None), "0")
+        self.assertEqual(w.format_cost(0.0), "$0.00")
+        self.assertEqual(w.format_cost(2.5), "$2.50")
+        self.assertEqual(w.format_cost(None), "$0.00")
+
+    def test_session_line_avec_tokens(self):
+        w = self._watcher()
+        row = {"id": "ses_aaa111", "tokens_input": 13029, "tokens_output": 0,
+               "tokens_cache_read": 0, "tokens_cache_write": 0, "cost": 1.5}
+        line = w.session_line(row, {}, 1000000)
+        self.assertIn("usage 1 %", line)
+        self.assertIn("13 029 tokens", line)
+        self.assertIn("$1.50", line)
 
     def test_log_startup_session_sans_etat(self):
         w = self._watcher()
@@ -873,14 +959,14 @@ class TestSession(unittest.TestCase):
             adopted = {"id": "ses_aaa111", "baseline_input": 100, "baseline_cache": 0,
                        "baseline_cache_write": 0, "baseline_output": 50,
                        "compacted_at": "", "model": "m"}
-            w.set_session_state(root, "F-1", adopted)
+            w.set_session_state(root, "F-1", "hadji", adopted)
             db = _Path(tmp) / "opencode.db"
             conn = sqlite3.connect(str(db))
             conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
                          " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
-                         " time_created INT, time_compacting INT, directory TEXT)")
-            conn.execute("INSERT INTO session VALUES ('ses_aaa111', 200, 100, 999999, 0, 'm', 10, NULL, 'C:/P')")
-            conn.execute("INSERT INTO session VALUES ('ses_bbb222', 5, 5, 5, 0, 'm', 9999, NULL, 'C:/P')")
+                         " time_created INT, time_compacting INT, directory TEXT, title TEXT, cost REAL)")
+            conn.execute("INSERT INTO session VALUES ('ses_aaa111', 200, 100, 999999, 0, 'm', 10, NULL, 'C:/P', NULL, 0.0)")
+            conn.execute("INSERT INTO session VALUES ('ses_bbb222', 5, 5, 5, 0, 'm', 9999, NULL, 'C:/P', NULL, 0.0)")
             conn.commit()
             conn.close()
             real_db = w.opencode_db_path
@@ -888,13 +974,119 @@ class TestSession(unittest.TestCase):
             try:
                 # Snapshot de déclenchement vide + autre session plus récente :
                 # l'observation doit suivre la session adoptée (ses_aaa111), pas ses_bbb222.
-                w._observe_session(root, "F-1", "", {}, 0.95, 1048576, 0)
+                w._observe_session(root, "F-1", "hadji", "", {}, 0.95, 1048576, 0)
             finally:
                 w.opencode_db_path = real_db
             log = (root / ".opencode" / "history" / "workflow-log.md").read_text(encoding="utf-8")
             self.assertIn(w.short_session("ses_aaa111"), log)
             self.assertNotIn(w.short_session("ses_bbb222"), log)
-            self.assertEqual(w.get_session_state(root, "F-1")["id"], "ses_aaa111")
+            self.assertEqual(w.get_session_state(root, "F-1", "hadji")["id"], "ses_aaa111")
+
+    def test_maybe_rotate_before_run(self):
+        w = self._watcher()
+        import sqlite3
+        import tempfile
+        from pathlib import Path as _Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _Path(tmp)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            (root / ".opencode" / "history").mkdir(parents=True)
+            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
+            adopted = {"id": "ses_rrr111", "baseline_input": 0, "baseline_cache": 0,
+                       "baseline_cache_write": 0, "baseline_output": 0,
+                       "compacted_at": "", "model": "m"}
+            w.set_session_state(root, "F-1", "hadji", adopted)
+            db = _Path(tmp) / "opencode.db"
+            conn = sqlite3.connect(str(db))
+            conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
+                         " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
+                         " time_created INT, time_compacting INT, directory TEXT, title TEXT, cost REAL)")
+            conn.execute("INSERT INTO session VALUES ('ses_rrr111', 960, 0, 0, 0, 'm', 10, NULL, 'C:/P', NULL, 0.0)")
+            conn.commit()
+            conn.close()
+            real_db = w.opencode_db_path
+            w.opencode_db_path = lambda: db
+            try:
+                # 96 % >= 95 % : rotation préventive, état nettoyé.
+                self.assertEqual(w.maybe_rotate_before_run(root, "F-1", adopted, "hadji", 0.95, 1000), "")
+                self.assertEqual(w.get_session_state(root, "F-1", "hadji"), {})
+                # Sous le seuil : on garde.
+                w.set_session_state(root, "F-1", "hadji", adopted)
+                self.assertEqual(w.maybe_rotate_before_run(root, "F-1", adopted, "hadji", 0.99, 100000),
+                                 "ses_rrr111")
+                # Sans session : rien à faire.
+                self.assertEqual(w.maybe_rotate_before_run(root, "F-1", {}, "hadji", 0.95, 1000), "")
+            finally:
+                w.opencode_db_path = real_db
+
+    def test_note_session_stats(self):
+        w = self._watcher()
+        import sqlite3
+        import tempfile
+        from pathlib import Path as _Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _Path(tmp)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            (root / ".opencode" / "history").mkdir(parents=True)
+            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
+            adopted = {"id": "ses_s1", "baseline_input": 100, "baseline_cache": 0,
+                       "baseline_cache_write": 0, "baseline_output": 50,
+                       "compacted_at": "", "model": "m"}
+            w.set_session_state(root, "F-1", "hadji", adopted)
+            db = _Path(tmp) / "opencode.db"
+            conn = sqlite3.connect(str(db))
+            conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
+                         " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
+                         " time_created INT, time_compacting INT, directory TEXT, title TEXT, cost REAL)")
+            conn.execute("INSERT INTO session VALUES ('ses_s1', 1100, 550, 0, 0, 'm', 10, NULL,"
+                         " 'C:/P', 'Sayrhazi F-1 hadji', 0.0)")
+            conn.commit()
+            conn.close()
+            real_db = w.opencode_db_path
+            w.opencode_db_path = lambda: db
+            try:
+                w._observe_session(root, "F-1", "hadji", "ses_s1", adopted, 0.95, 10000, 0)
+            finally:
+                w.opencode_db_path = real_db
+            block = w.get_session_state(root, "F-1", "hadji")
+            self.assertEqual(int(block["used_tokens"]), 1500)
+            self.assertAlmostEqual(float(block["usage"]), 0.15)
+            self.assertIn("observed_at", block)
+            text = (root / ".opencode" / "state" / "workflow-state.yaml").read_text(encoding="utf-8")
+            self.assertIn("used_tokens:", text)
+
+    def test_attribution_session_par_titre(self):
+        w = self._watcher()
+        import sqlite3
+        import tempfile
+        from pathlib import Path as _Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _Path(tmp)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            (root / ".opencode" / "history").mkdir(parents=True)
+            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
+            db = _Path(tmp) / "opencode.db"
+            conn = sqlite3.connect(str(db))
+            conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
+                         " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
+                         " time_created INT, time_compacting INT, directory TEXT, title TEXT, cost REAL)")
+            # Deux sessions créées à la même seconde, titres distincts.
+            proot = str(root).replace("\\", "/")
+            conn.execute("INSERT INTO session VALUES ('ses_h1', 10, 5, 0, 0, 'm', 100, NULL,"
+                         " ?, 'Sayrhazi F-1 hadji', 0.0)", (proot,))
+            conn.execute("INSERT INTO session VALUES ('ses_z1', 10, 5, 0, 0, 'm', 100, NULL,"
+                         " ?, 'Sayrhazi F-1 zawadi', 2.5)", (proot,))
+            conn.commit()
+            conn.close()
+            real_db = w.opencode_db_path
+            w.opencode_db_path = lambda: db
+            try:
+                w._observe_session(root, "F-1", "hadji", "", {}, 0.95, 1048576, 0)
+                w._observe_session(root, "F-1", "zawadi", "", {}, 0.95, 1048576, 0)
+            finally:
+                w.opencode_db_path = real_db
+            self.assertEqual(w.get_session_state(root, "F-1", "hadji")["id"], "ses_h1")
+            self.assertEqual(w.get_session_state(root, "F-1", "zawadi")["id"], "ses_z1")
 
     def test_query_session_sqlite(self):
         w = self._watcher()
@@ -905,13 +1097,15 @@ class TestSession(unittest.TestCase):
         conn = sqlite3.connect(str(db))
         conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
                      " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
-                     " time_created INT, time_compacting INT, directory TEXT)")
-        conn.execute("INSERT INTO session VALUES ('ses_x', 10, 20, 30, 0, 'm', 999, NULL, 'C:/P')")
+                     " time_created INT, time_compacting INT, directory TEXT, title TEXT, cost REAL)")
+        conn.execute("INSERT INTO session VALUES ('ses_x', 10, 20, 30, 0, 'm', 999, NULL, 'C:/P', 'Sayrhazi F-1 hadji', 1.5)")
         conn.commit()
         conn.close()
         row = w.query_session(db, "C:\\P", 500)
         self.assertEqual(row["id"], "ses_x")
         self.assertIsNone(w.query_session(db, "C:\\P", 1000))
+        self.assertEqual(w.query_session(db, "C:\\P", 0, title="Sayrhazi F-1 hadji")["id"], "ses_x")
+        self.assertIsNone(w.query_session(db, "C:\\P", 0, title="Sayrhazi F-1 zawadi"))
         self.assertIsNone(w.query_session(_Path(tempfile.mkdtemp()) / "absent.db", "C:/P", 0))
 
 

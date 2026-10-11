@@ -61,10 +61,8 @@ def default_state(task_id: str) -> dict:
                          "current_stages": [], "completed_stages": [],
                          "pending_stages": [], "blocked_stages": [],
                          "running_agents": [],
-                         "session": {"id": "", "baseline_input": 0,
-                                     "baseline_cache": 0, "baseline_cache_write": 0,
-                                     "baseline_output": 0,
-                                     "compacted_at": None, "model": ""}}}
+                         # Sessions OpenCode par agent (remplies par le watcher).
+                         "session": {}}}
 
 
 def _scalar(value) -> str:

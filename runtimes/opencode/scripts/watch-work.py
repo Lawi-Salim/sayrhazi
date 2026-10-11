@@ -70,6 +70,21 @@ AGENT_PROMPTS = {
     "designer": "Design Sayrhazi task {task} : lis .opencode/resume/plan.txt et produis design.txt",
 }
 
+# Cloisonnement d'écriture en session partagée : chaque agent ne produit
+# QUE son rapport (lire les autres est utile, les écrire est interdit).
+# L'archivage vers .opencode/history/ reste autorisé.
+OWN_REPORT = {"builder": "build.txt", "reviewer": "review.txt", "security": "security.txt",
+              "qa": "qa.txt", "designer": "design.txt"}
+ALL_REPORTS = ("plan.txt", "design.txt", "build.txt", "review.txt", "security.txt", "qa.txt")
+
+
+def isolation_clause(agent: str) -> str:
+    """Clause anti-débordement : seul le rapport de l'agent peut être écrit."""
+    own = OWN_REPORT.get(agent or "", "")
+    others = ", ".join(r for r in ALL_REPORTS if r != own)
+    return (f"Ne produis QUE .opencode/resume/{own} : n'écris jamais {others} "
+            f"(lecture autorisée, écriture interdite ; archivage vers .opencode/history/ autorisé).")
+
 TASK_RE = re.compile(r"^\s*task_id\s*:\s*(\S+)\s*$", re.MULTILINE | re.IGNORECASE)
 STATUS_RE = re.compile(r"^\s*status\s*:\s*(\S.*?)\s*$", re.MULTILINE | re.IGNORECASE)
 
@@ -175,17 +190,15 @@ def context_limit(model_id: str, default: int) -> int:
     return default if isinstance(default, int) and default > 0 else SESSION_DEFAULT_LIMIT
 
 
-def session_usage(row: dict, baseline: dict, limit: int) -> float:
-    """Part de contexte consommée depuis l'adoption (0.0 à >1.0).
+def session_used(row: dict, baseline: dict) -> int:
+    """Tokens neufs consommés depuis l'adoption (input + output + cache_write).
 
     row : compteurs cumulés lus dans la base ; baseline : compteurs à
-    l'adoption de la session ; limit : fenêtre du modèle. Seuls les
-    contenus nouveaux comptent (input + output + cache_write) : les
-    relectures de cache (`tokens_cache_read`) gonflent vite en cumulé
-    sans occuper plus de contexte, elles sont donc exclues.
+    l'adoption de la session. Les relectures de cache (`tokens_cache_read`)
+    gonflent vite en cumulé sans occuper plus de contexte : exclues.
     """
-    if not row or not isinstance(limit, int) or limit <= 0:
-        return 0.0
+    if not row:
+        return 0
 
     def _num(value) -> int:
         try:
@@ -193,10 +206,33 @@ def session_usage(row: dict, baseline: dict, limit: int) -> float:
         except (TypeError, ValueError):
             return 0
 
-    used = ((_num(row.get("tokens_input")) - _num((baseline or {}).get("baseline_input")))
-            + (_num(row.get("tokens_output")) - _num((baseline or {}).get("baseline_output")))
-            + (_num(row.get("tokens_cache_write")) - _num((baseline or {}).get("baseline_cache_write", 0))))
-    return max(0.0, used / limit)
+    base = baseline or {}
+    return ((_num(row.get("tokens_input")) - _num(base.get("baseline_input")))
+            + (_num(row.get("tokens_output")) - _num(base.get("baseline_output")))
+            + (_num(row.get("tokens_cache_write")) - _num(base.get("baseline_cache_write", 0))))
+
+
+def session_usage(row: dict, baseline: dict, limit: int) -> float:
+    """Part de contexte consommée depuis l'adoption (0.0 à >1.0)."""
+    if not isinstance(limit, int) or limit <= 0:
+        return 0.0
+    return max(0.0, session_used(row, baseline) / limit)
+
+
+def format_tokens(count: int) -> str:
+    """12 029 — milliers séparés par une espace (lisibilité console)."""
+    try:
+        return f"{max(0, int(count)):,}".replace(",", " ")
+    except (TypeError, ValueError):
+        return "0"
+
+
+def format_cost(value) -> str:
+    """$0.00 — coût déclaré par le provider (0.00 sur tier gratuit)."""
+    try:
+        return f"${max(0.0, float(value or 0.0)):.2f}"
+    except (TypeError, ValueError):
+        return "$0.00"
 
 
 def should_rotate(usage: float, max_usage: float, compacted_now, compacted_before) -> bool:
@@ -211,11 +247,15 @@ def should_rotate(usage: float, max_usage: float, compacted_now, compacted_befor
 
 
 def short_session(session_id: str) -> str:
-    """Id court d'affichage (`ses_eda5d1...` -> `eda5d1`)."""
+    """Id court d'affichage (`ses_eda5d12345...` -> `eda5d12345`, 10 signes).
+
+    10 signes (et non 6) car des sessions nées dans la même seconde
+    partagent leur préfixe (`ed5d45be…` vs `ed5d45c42…`).
+    """
     text = str(session_id or "")
     if text.startswith("ses_"):
         text = text[4:]
-    return text[:6] if text else "?"
+    return text[:10] if text else "?"
 
 
 def read_session_config(project_root: Path) -> Tuple[float, int]:
@@ -265,20 +305,21 @@ def opencode_db_path() -> Optional[Path]:
 
 def _session_row(cursor, where: str, params: tuple) -> Optional[dict]:
     cursor.execute("SELECT id, tokens_input, tokens_output, tokens_cache_read,"
-                   " tokens_cache_write, model, time_created, time_compacting"
+                   " tokens_cache_write, model, time_created, time_compacting, cost"
                    " FROM session WHERE " + where
                    + " ORDER BY time_created DESC LIMIT 1", params)
     found = cursor.fetchone()
     if not found:
         return None
     keys = ("id", "tokens_input", "tokens_output", "tokens_cache_read",
-            "tokens_cache_write", "model", "time_created", "time_compacting")
+            "tokens_cache_write", "model", "time_created", "time_compacting", "cost")
     return dict(zip(keys, found))
 
 
 def query_session(db_path: Path, directory: str, since_ms: int = 0,
-                  session_id: str = "") -> Optional[dict]:
-    """Ligne de session : par id si réutilisée, sinon la plus récente du projet.
+                  session_id: str = "", title: str = "") -> Optional[dict]:
+    """Ligne de session : par id si réutilisée, sinon par titre (attribution
+    déterministe `Sayrhazi <task> <agent>`), sinon la plus récente du projet.
 
     Jamais bloquant : None si base absente, verrouillée ou schéma inattendu.
     """
@@ -290,6 +331,12 @@ def query_session(db_path: Path, directory: str, since_ms: int = 0,
             if session_id:
                 return _session_row(cursor, "id = ?", (session_id,))
             norm = (directory or "").replace("\\", "/")
+            if title:
+                found = _session_row(cursor, "directory = ? AND title = ? AND time_created >= ?",
+                                     (norm, title, int(since_ms or 0)))
+                if found is not None:
+                    return found
+                return None
             return _session_row(cursor, "directory = ? AND time_created >= ?",
                                 (norm, int(since_ms or 0)))
         finally:
@@ -708,7 +755,8 @@ STATE_KEYS = ("task_id", "status", "started_at", "current_stages", "completed_st
               "pending_stages", "blocked_stages", "running_agents", "session")
 
 SESSION_STATE_KEYS = ("id", "baseline_input", "baseline_cache", "baseline_cache_write",
-                      "baseline_output", "compacted_at", "model")
+                      "baseline_output", "compacted_at", "model",
+                      "usage", "used_tokens", "cost", "observed_at")
 
 
 def _qscalar(value) -> str:
@@ -738,8 +786,9 @@ def _unquote(text: str) -> str:
 def read_state_minimal(project_root: Path) -> dict:
     """Lit les clefs connues de workflow-state.yaml (sans dépendance).
 
-    Le bloc `session:` (sous-clefs à 4 espaces) est lu comme mapping ;
-    toute autre indentation est ignorée.
+    Le bloc `session:` contient un sous-mapping par agent (sous-clefs à
+    6 espaces) ; l'ancien format plat (sous-clefs scalaires) est ignoré.
+    Toute autre indentation est ignorée.
     """
     path = project_root / ".opencode" / "state" / "workflow-state.yaml"
     data: dict = {}
@@ -760,8 +809,19 @@ def read_state_minimal(project_root: Path) -> dict:
                     sub = re.match(r"^\s{4}(\w+)\s*:\s*(.*)$", lines[i])
                     if not sub:
                         break
-                    if sub.group(1) in SESSION_STATE_KEYS:
-                        session[sub.group(1)] = _unquote(sub.group(2))
+                    if sub.group(2).strip() == "":
+                        agent_block: dict = {}
+                        i += 1
+                        while i < len(lines):
+                            leaf = re.match(r"^\s{6}(\w+)\s*:\s*(.*)$", lines[i])
+                            if not leaf:
+                                break
+                            if leaf.group(1) in SESSION_STATE_KEYS:
+                                agent_block[leaf.group(1)] = _unquote(leaf.group(2))
+                            i += 1
+                        if agent_block:
+                            session[sub.group(1)] = agent_block
+                        continue
                     i += 1
                 data[key] = session
                 continue
@@ -793,8 +853,13 @@ def write_state_minimal(project_root: Path, values: dict) -> bool:
         if key == "session":
             lines.append("  session:")
             session = value if isinstance(value, dict) else {}
-            for sub in SESSION_STATE_KEYS:
-                lines.append("    " + sub + ": " + _qscalar(session.get(sub)))
+            for agent_name in sorted(session):
+                block = session[agent_name]
+                if not isinstance(block, dict) or not str(block.get("id") or ""):
+                    continue
+                lines.append("    " + agent_name + ":")
+                for sub in SESSION_STATE_KEYS:
+                    lines.append("      " + sub + ": " + _qscalar(block.get(sub)))
             continue
         if key.endswith("_stages") or key == "running_agents":
             items = value if isinstance(value, list) else _flow_items(value or "[]")
@@ -811,12 +876,14 @@ def write_state_minimal(project_root: Path, values: dict) -> bool:
 def note_state_running(project_root: Path, task_id: str, agent: Optional[str]) -> None:
     """Signale un agent en cours (ou la fin si agent None). Chemin historique."""
     running = [agent] if agent else []
+    current = read_state_minimal(project_root)
     values: dict = {"task_id": task_id, "status": "IN_PROGRESS", "running_agents": running}
     if agent is None:
-        state = read_state_minimal(project_root)
-        if state.get("task_id") != task_id:
+        if current.get("task_id") != task_id:
             return
         values = {"running_agents": running}
+    elif current.get("task_id") not in (None, "", task_id):
+        values["session"] = {}
     write_state_minimal(project_root, values)
 
 
@@ -833,8 +900,11 @@ def state_agents_add(project_root: Path, task_id: str, agent: Optional[str]) -> 
         running = items if isinstance(items, list) else _flow_items(items or "[]")
         if agent not in running:
             running.append(agent)
-        write_state_minimal(project_root, {"task_id": task_id, "status": "IN_PROGRESS",
-                                           "running_agents": running})
+        values: dict = {"task_id": task_id, "status": "IN_PROGRESS",
+                        "running_agents": running}
+        if current.get("task_id") not in (None, "", task_id):
+            values["session"] = {}
+        write_state_minimal(project_root, values)
 
 
 def state_agents_remove(project_root: Path, task_id: str, agent: Optional[str]) -> None:
@@ -852,77 +922,132 @@ def state_agents_remove(project_root: Path, task_id: str, agent: Optional[str]) 
         write_state_minimal(project_root, {"running_agents": running})
 
 
-def get_session_state(project_root: Path, task_id: str) -> dict:
-    """Bloc session de la tâche (vide si autre tâche ou absent)."""
+def get_session_state(project_root: Path, task_id: str, agent: str = "") -> dict:
+    """Bloc session de la tâche (et de l'agent si précisé). Vide sinon."""
     with _SHARED_LOCK:
         current = read_state_minimal(project_root)
     if current.get("task_id") != task_id:
         return {}
     session = current.get("session")
-    return dict(session) if isinstance(session, dict) else {}
+    if not isinstance(session, dict):
+        return {}
+    if not agent:
+        return dict(session)
+    block = session.get(agent)
+    return dict(block) if isinstance(block, dict) else {}
 
 
-def set_session_state(project_root: Path, task_id: str, session: dict) -> None:
-    """Persiste le bloc session de la tâche (thread-safe)."""
+def set_session_state(project_root: Path, task_id: str, agent: str, session: dict) -> None:
+    """Persiste le bloc session de l'agent (thread-safe)."""
     with _SHARED_LOCK:
+        current = read_state_minimal(project_root)
+        mapping = current.get("session")
+        mapping = dict(mapping) if isinstance(mapping, dict) else {}
+        mapping[agent] = dict(session)
         write_state_minimal(project_root, {"task_id": task_id, "status": "IN_PROGRESS",
-                                           "session": dict(session)})
+                                           "session": mapping})
 
 
-def adopt_session_if_absent(project_root: Path, task_id: str, row: dict) -> bool:
-    """Adopte la session si aucune n'est persistée (vague parallèle : le 1er gagne)."""
+def adopt_session_if_absent(project_root: Path, task_id: str, agent: str, row: dict) -> bool:
+    """Adopte la session de l'agent si aucune n'est persistée."""
     with _SHARED_LOCK:
         current = read_state_minimal(project_root)
         if current.get("task_id") != task_id:
             return False
         sess = current.get("session")
-        if isinstance(sess, dict) and str(sess.get("id") or ""):
-            return False
-        write_state_minimal(project_root, {"task_id": task_id, "status": "IN_PROGRESS", "session": {
+        if isinstance(sess, dict):
+            block = sess.get(agent)
+            if isinstance(block, dict) and str(block.get("id") or ""):
+                return False
+        mapping = dict(sess) if isinstance(sess, dict) else {}
+        mapping[agent] = {
             "id": row.get("id"), "baseline_input": row.get("tokens_input") or 0,
             "baseline_cache": row.get("tokens_cache_read") or 0,
             "baseline_cache_write": row.get("tokens_cache_write") or 0,
             "baseline_output": row.get("tokens_output") or 0,
             "compacted_at": row.get("time_compacting") or "",
-            "model": parse_model_id(row.get("model"))}})
+            "model": parse_model_id(row.get("model"))}
+        write_state_minimal(project_root, {"task_id": task_id, "status": "IN_PROGRESS",
+                                           "session": mapping})
         return True
 
 
-def clear_session_state(project_root: Path, task_id: str) -> None:
-    """Oublie la session (rotation) sans toucher au reste de l'état."""
-    set_session_state(project_root, task_id, {key: ("" if key in ("id", "model") else 0)
-                                              if key != "compacted_at" else ""
-                                              for key in SESSION_STATE_KEYS})
+def clear_session_state(project_root: Path, task_id: str, agent: str = "") -> None:
+    """Oublie la session de l'agent (rotation) sans toucher au reste."""
+    with _SHARED_LOCK:
+        current = read_state_minimal(project_root)
+        mapping = current.get("session")
+        mapping = dict(mapping) if isinstance(mapping, dict) else {}
+        if agent:
+            mapping.pop(agent, None)
+        else:
+            mapping = {}
+        write_state_minimal(project_root, {"task_id": task_id, "status": "IN_PROGRESS",
+                                           "session": mapping})
 
 
 def session_line(row: Optional[dict], baseline: dict, limit: int) -> str:
-    """Ligne brute `session <id> · usage NN %` (journal, sans couleur)."""
+    """Ligne brute `session <id> · usage NN % · NNN tokens` (journal, sans couleur)."""
     if not row:
         return "session inconnue (base OpenCode illisible)"
     usage = session_usage(row, baseline, limit)
-    return f"session {short_session(row.get('id'))} · usage {usage * 100:.0f} %"
+    used = session_used(row, baseline)
+    return (f"session {short_session(row.get('id'))} · usage {usage * 100:.0f} %"
+            f" · {format_tokens(used)} tokens · {format_cost(row.get('cost'))}")
 
 
-def track_session(project_root: Path, task_id: str, row: Optional[dict],
-                  baseline: dict, limit: int, max_usage: float,
-                  adopted_compacted) -> None:
-    """Journalise l'usage et persiste/adopte/pivote la session (journal brut)."""
+def note_session_stats(project_root: Path, task_id: str, agent: str,
+                       row: dict, baseline: dict, limit: int) -> None:
+    """Snapshot d'affichage dans l'état (usage/tokens/coût/observed_at).
+
+    N'écrit que si le bloc suivi correspond à la ligne observée ; les
+    baselines ne sont jamais retouchées ici. Lecture directe du fichier
+    = vue datée, jamais confondue avec le temps réel.
+    """
+    with _SHARED_LOCK:
+        current = read_state_minimal(project_root)
+        if current.get("task_id") != task_id:
+            return
+        mapping = current.get("session")
+        if not isinstance(mapping, dict):
+            return
+        block = mapping.get(agent)
+        if not isinstance(block, dict):
+            return
+        if str(block.get("id") or "") != str((row or {}).get("id") or ""):
+            return
+        block = dict(block)
+        block["usage"] = round(session_usage(row, block, limit), 4)
+        block["used_tokens"] = session_used(row, block)
+        block["cost"] = row.get("cost") or 0.0
+        block["observed_at"] = datetime.now().astimezone().replace(microsecond=0).isoformat()
+        mapping = dict(mapping)
+        mapping[agent] = block
+        write_state_minimal(project_root, {"task_id": task_id, "status": "IN_PROGRESS",
+                                           "session": mapping})
+
+
+def track_session(project_root: Path, task_id: str, agent: str, row: Optional[dict],
+                   baseline: dict, limit: int, max_usage: float,
+                   adopted_compacted) -> None:
+    """Journalise l'usage et persiste/adopte/pivote la session de l'agent (journal brut)."""
     if not row:
-        journal(project_root, session_line(None, baseline, limit))
+        journal(project_root, f"{agent} : " + session_line(None, baseline, limit))
         return
     usage = session_usage(row, baseline, limit)
-    journal(project_root, session_line(row, baseline, limit))
+    journal(project_root, f"{agent} : " + session_line(row, baseline, limit))
     if not str((baseline or {}).get("id") or ""):
         if usage >= max_usage:
-            journal(project_root, f"session {short_session(row.get('id'))} non adoptée"
+            journal(project_root, f"{agent} : session {short_session(row.get('id'))} non adoptée"
                                   f" (déjà à {usage * 100:.0f} %)")
             return
-        adopt_session_if_absent(project_root, task_id, row)
-        return
-    if should_rotate(usage, max_usage, row.get("time_compacting"), adopted_compacted):
-        clear_session_state(project_root, task_id)
-        journal(project_root, f"session {short_session(row.get('id'))} : rotation"
+        adopt_session_if_absent(project_root, task_id, agent, row)
+    elif should_rotate(usage, max_usage, row.get("time_compacting"), adopted_compacted):
+        clear_session_state(project_root, task_id, agent)
+        journal(project_root, f"{agent} : session {short_session(row.get('id'))} : rotation"
                               f" (usage {usage * 100:.0f} %)")
+        return
+    note_session_stats(project_root, task_id, agent, row, baseline, limit)
 
 
 def max_parallel_agents(config: Optional[dict]) -> int:
@@ -1030,27 +1155,29 @@ def check_opencode_available() -> bool:
         return False
 
 
-def _observe_session(project_root: Path, task_id: str, reuse_id: str, adopted: dict,
-                   max_usage: float, default_limit: int, start_ms: int) -> None:
+def _observe_session(project_root: Path, task_id: str, agent: str, reuse_id: str,
+                   adopted: dict, max_usage: float, default_limit: int,
+                   start_ms: int) -> None:
     """Lit l'usage réel, l'affiche (console colorée, journal brut) et pivote si besoin.
 
-    L'état est relu ici (pas celui du déclenchement) : en vague parallèle,
-    une autre branche a pu adopter la session partagée entre-temps.
+    L'état est relu ici (pas celui du déclenchement) : une rotation a pu
+    survenir entre-temps. Le suivi porte sur la session de l'agent.
     """
-    fresh = get_session_state(project_root, task_id)
+    fresh = get_session_state(project_root, task_id, agent)
     if not isinstance(fresh, dict) or not fresh:
         fresh = adopted if isinstance(adopted, dict) else {}
-    adopted_compacted = fresh.get("compacted_at")
     db_path = opencode_db_path()
     row = None
     fresh_id = str(fresh.get("id") or "")
+    expected_title = f"Sayrhazi {task_id} {agent}"
     if db_path is not None:
         if fresh_id:
             row = query_session(db_path, "", 0, session_id=fresh_id)
         elif reuse_id:
             row = query_session(db_path, "", 0, session_id=reuse_id)
         if row is None and not fresh_id:
-            row = query_session(db_path, str(project_root), start_ms)
+            row = query_session(db_path, str(project_root), start_ms,
+                                title=expected_title)
     limit = context_limit(parse_model_id((row or {}).get("model")), default_limit)
     raw = session_line(row, fresh, limit)
     usage = session_usage(row or {}, fresh, limit)
@@ -1058,9 +1185,67 @@ def _observe_session(project_root: Path, task_id: str, reuse_id: str, adopted: d
     match = re.search(r"\d{1,3}\s?%", raw)
     if match and usage >= max_usage and row:
         shown = raw.replace(match.group(0), paint(match.group(0), "red"), 1)
-    log(shown)
-    track_session(project_root, task_id, row, fresh, limit, max_usage,
+    log(f"{agent} : " + shown if agent else shown)
+    track_session(project_root, task_id, agent, row, fresh, limit, max_usage,
                   fresh.get("compacted_at"))
+
+
+def maybe_rotate_before_run(project_root: Path, task_id: str, adopted: dict,
+                              agent: str, max_usage: float, default_limit: int) -> str:
+    """Rotation préventive : si la session de l'agent dépasse déjà le seuil,
+    on pivote AVANT l'appel (pas de vague promise à la saturation).
+
+    Retourne le session_id réutilisable ("" si rotation ou absent). Journal brut."""
+    reuse_id = str((adopted or {}).get("id") or "")
+    if not reuse_id:
+        return ""
+    db_path = opencode_db_path()
+    row = query_session(db_path, "", 0, session_id=reuse_id) if db_path is not None else None
+    if not row:
+        return reuse_id
+    limit = context_limit(parse_model_id(row.get("model")), default_limit)
+    usage = session_usage(row, adopted, limit)
+    if not should_rotate(usage, max_usage, row.get("time_compacting"), adopted.get("compacted_at")):
+        return reuse_id
+    clear_session_state(project_root, task_id, agent)
+    raw = (f"session {short_session(reuse_id)} : rotation préventive"
+           f" (usage {usage * 100:.0f} %)")
+    journal(project_root, raw)
+    match = re.search(r"\d{1,3}\s?%", raw)
+    log(raw.replace(match.group(0), paint(match.group(0), "red"), 1) if match else raw)
+    return ""
+
+
+def build_command(agent_file: str, prompt: str, task_id: str, session_id: str,
+                  model: str) -> list:
+    """Commande `opencode run` : agent + titre + session + modèle forcé.
+
+    Le modèle du frontmatter de l'agent est la source de vérité : passé en
+    `--model`, il gagne sur le modèle actif de la session comme sur le
+    défaut sticky. Changer de modèle = éditer la fiche de l'agent, jamais
+    l'état (le `model:` de l'état n'est qu'un constat informatif).
+    """
+    cmd = ["opencode", "run", "--agent", agent_file,
+           "--title", f"Sayrhazi {task_id} {agent_file}"]
+    if model:
+        cmd += ["--model", model]
+    if session_id:
+        cmd += ["--session", session_id]
+    return cmd + [prompt]
+
+
+def output_verified(project_root: Path, output_report: str, task_id: str) -> bool:
+    """Le rapport de sortie couvre-t-il le task_id ? (fichier + mention)."""
+    if not output_report:
+        return True
+    output = project_root / ".opencode" / "resume" / output_report
+    if not output.is_file():
+        return False
+    try:
+        text = output.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return task_id in text
 
 
 def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, str]:
@@ -1070,11 +1255,13 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, 
     output_report = ROLE_REPORT.get(agent, "")
     trigger = stage.get("trigger") or {}
     prompt = AGENT_PROMPTS.get(agent, "Sayrhazi task {task} : avance l'étape " + str(stage.get("id", "?")))
-    prompt = prompt.format(task=task_id)
+    prompt = prompt.format(task=task_id) + " " + isolation_clause(agent)
     full_model, model_short = agent_model(project_root, agent_file)
     max_usage, default_limit = read_session_config(project_root)
-    adopted = get_session_state(project_root, task_id)
+    adopted = get_session_state(project_root, task_id, agent_file)
     reuse_id = str(adopted.get("id") or "") if adopted.get("id") else ""
+    reuse_id = maybe_rotate_before_run(project_root, task_id, adopted, agent_file,
+                                       max_usage, default_limit)
     call = f"{trigger.get('report')} {trigger.get('status')} ({task_id}) -> appel de {agent_file}"
     if model_short:
         call += f" [{model_short}]"
@@ -1093,14 +1280,11 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, 
     ticker.start()
 
     def _invoke(session_id: str):
-        base = ["opencode", "run", "--agent", agent_file]
-        if session_id:
-            base += ["--session", session_id]
+        parts = build_command(agent_file, prompt, task_id, session_id, full_model)
         if IS_WINDOWS:
-            parts = base + [prompt]
             command_str = " ".join(f'"{p}"' if " " in p else p for p in parts)
             return subprocess.run(command_str, cwd=str(project_root), capture_output=True, text=True, shell=True, timeout=600, encoding="utf-8", errors="replace")
-        return subprocess.run(base + [prompt], cwd=str(project_root), capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
+        return subprocess.run(parts, cwd=str(project_root), capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace")
 
     def _session_dead(output_text: str) -> bool:
         low = (output_text or "").lower()
@@ -1111,7 +1295,7 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, 
         if result.returncode != 0 and reuse_id:
             combined = str(getattr(result, "stdout", "") or "") + str(getattr(result, "stderr", "") or "")
             if _session_dead(combined):
-                clear_session_state(project_root, task_id)
+                clear_session_state(project_root, task_id, agent_file)
                 journal(project_root, f"session {short_session(reuse_id)} inconnue d'OpenCode : reprise sans session")
                 log(f"session {short_session(reuse_id)} inconnue : nouvel appel sans session...")
                 reuse_id = ""
@@ -1121,6 +1305,14 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, 
         return False, "opencode_missing"
     except subprocess.TimeoutExpired:
         log(f"ERREUR : timeout 600s sur appel {agent_file} ({task_id}, {format_duration(time.time() - start)} ecoulees).")
+        stop_tick.set()
+        ticker.join()
+        _observe_session(project_root, task_id, agent_file, reuse_id, adopted,
+                         max_usage, default_limit, start_ms)
+        if output_verified(project_root, output_report, task_id):
+            log(f"{output_report} produit malgré le timeout (processus bloqué après écriture).")
+            journal(project_root, f"{output_report} produit malgré le timeout pour {task_id}.")
+            return True, "ok"
         return False, "timeout"
     except Exception as exc:
         log(f"ERREUR inattendue : {exc}")
@@ -1135,7 +1327,8 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, 
         sys.stdout.flush()
         log(f"============ FIN · {agent_file} ============")
         print()
-    _observe_session(project_root, task_id, reuse_id, adopted, max_usage, default_limit, start_ms)
+    _observe_session(project_root, task_id, agent_file, reuse_id, adopted,
+                     max_usage, default_limit, start_ms)
     if result.returncode != 0:
         log(f"opencode erreur {result.returncode} :")
         if result.stderr:
@@ -1277,26 +1470,30 @@ def watched_reports(usable: list) -> list:
 
 
 def log_startup_session(project_root: Path) -> None:
-    """Affiche la session reprise au démarrage (ou son absence)."""
+    """Affiche les sessions reprises au démarrage (une par agent, ou aucune)."""
     state = read_state_minimal(project_root)
     task_id = str(state.get("task_id") or "")
     sess = state.get("session")
     sess = dict(sess) if isinstance(sess, dict) else {}
-    sid = str(sess.get("id") or "")
-    if not task_id or not sid:
+    adopted = {name: block for name, block in sess.items()
+               if isinstance(block, dict) and str(block.get("id") or "")}
+    if not task_id or not adopted:
         log("session : aucune (nouvelle au prochain appel)")
         return
     max_usage, default_limit = read_session_config(project_root)
     db_path = opencode_db_path()
-    row = query_session(db_path, "", 0, session_id=sid) if db_path is not None else None
-    limit = context_limit(parse_model_id((row or {}).get("model")), default_limit)
-    usage = session_usage(row or {}, sess, limit)
-    raw = session_line(row, sess, limit) + f" (reprise, {task_id})"
-    match = re.search(r"\d{1,3}\s?%", raw)
-    shown = raw
-    if match and usage >= max_usage and row:
-        shown = raw.replace(match.group(0), paint(match.group(0), "red"), 1)
-    log(shown)
+    for name in sorted(adopted):
+        block = adopted[name]
+        row = (query_session(db_path, "", 0, session_id=str(block.get("id")))
+               if db_path is not None else None)
+        limit = context_limit(parse_model_id((row or {}).get("model")), default_limit)
+        usage = session_usage(row or {}, block, limit)
+        raw = f"{name} : " + session_line(row, block, limit) + f" (reprise, {task_id})"
+        match = re.search(r"\d{1,3}\s?%", raw)
+        shown = raw
+        if match and usage >= max_usage and row:
+            shown = raw.replace(match.group(0), paint(match.group(0), "red"), 1)
+        log(shown)
 
 
 def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
@@ -1315,6 +1512,7 @@ def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
 
     MAX_ATTEMPTS = 3
     BACKOFF = (30, 90, 270)
+    last_desc = [""]
 
     def snapshot() -> Tuple[dict, dict]:
         triggers: dict = {}
@@ -1343,7 +1541,10 @@ def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
         triggers, outputs = snapshot()
         conditions = read_conditions(root)
         found = eligible_transitions({"stages": usable}, triggers, conditions, outputs)
-        log(f"État : {describe(triggers)}")
+        desc = describe(triggers)
+        if desc != last_desc[0]:
+            log(f"État : {desc}")
+            last_desc[0] = desc
         todo = []
         for stage, task_id, why in found:
             trigger_report = (stage.get("trigger") or {}).get("report")
@@ -1404,9 +1605,12 @@ def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
                 last_hashes[name] = stable
                 changed = True
         if not changed:
-            due = any(key in retry_due and retry_due[key] <= time.time() for key in retry_due)
-            if not due:
+            now = time.time()
+            due_keys = [key for key, ts in retry_due.items() if ts <= now]
+            if not due_keys:
                 return False
+            for key in due_keys:
+                retry_due.pop(key, None)
         return evaluate()
 
     if args.once:

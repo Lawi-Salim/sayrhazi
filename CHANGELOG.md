@@ -1,9 +1,18 @@
 # Changelog Sayrhazi
 
+## 0.11.1 — 2026-10-10
+
+- Sessions OpenCode : une session par (tâche, agent) au lieu d'une par tâche — une session partagée entre agents casse l'identité des rôles (`zawadi` répondant en Hadji constaté). Attribution déterministe par titre (`Sayrhazi <task> <agent>`), mapping par agent dans `workflow-state.yaml` (réinitialisé au changement de tâche), modèle du frontmatter imposé à chaque appel (`--model`, l'état ne fait que constater), usage affiché avec le nombre de tokens neufs et le coût (`usage 6 % · 12 029 tokens · $0.00`), snapshot daté persisté dans l'état (`usage`, `used_tokens`, `cost`, `observed_at`), rotation suivie par agent.
+
+- Cloisonnement d'écriture en session partagée : chaque appel exige que l'agent ne produise QUE son rapport (lecture des autres autorisée, écriture interdite, archivage vers `history/` autorisé) — corrige les trois rapports réécrits par chaque agent.
+- Rotation préventive : session déjà au-delà du seuil au déclenchement → on pivote AVANT l'appel (constaté : au-delà de 100 %, le modèle boucle en répétitions).
+- Timeout lucide : rapport produit malgré le timeout (processus bloqué après écriture) → succès acté, sans retry inutile ; retries à un seul coup et ligne `État :` seulement en cas de changement (fini le spam toutes les 3 s). 1 nouveau test.
+- Lecture frugale : nouvelle section dans les six fiches agents (`core/agents/*/instructions.md`, adaptateurs régénérés) — relire son précédent rapport d'abord, ne lire que les fichiers modifiés, traiter les rapports des autres comme des acquis, réserver le lourd aux fichiers changés, proportionner l'effort à l'ampleur du changement (doute → complet). 1 nouveau test (`TestRenderer.test_lecture_frugale_partout`).
+
 ## 0.11.0 — 2026-10-06
 
 - Bannière `info sayrhazi` en bleu `#269CD8` (ANSI truecolor, terminal uniquement, sorties redirigées inchangées).
-- Sessions OpenCode partagées : une session par tâche (`--session`, persistée dans `workflow-state.yaml`), usage réel lu dans la base locale (contenus nouveaux `input + output + cache_write` depuis l'adoption, relectures de cache exclues ; fenêtre 1 048 576 pour Muse Spark), rotation à `session.max_usage` (défaut 0.95, configurable) ou après compaction, adoption unique en vague parallèle, nouvel essai unique si l'id est inconnu. Console colorée (horodatage vert, agents, `task_id`, usage, erreurs) avec modèle affiché par agent ; lisibilité : vague de déclenchements encadrée (`#`) et sortie de chaque agent encadrée (`AGENT · … / FIN · …`), respiration par lignes vides, session reprise affichée au démarrage ; journal en texte brut. 14 nouveaux tests (`TestSession`).
+- Sessions OpenCode partagées : une session par tâche (`--session`, persistée dans `workflow-state.yaml`), usage réel lu dans la base locale (contenus nouveaux `input + output + cache_write` depuis l'adoption, relectures de cache exclues ; fenêtre 1 048 576 pour Muse Spark), rotation à `session.max_usage` (défaut 0.95, configurable) ou après compaction, adoption unique en vague parallèle, nouvel essai unique si l'id est inconnu. Console colorée (horodatage vert, agents, `task_id`, usage, erreurs) avec modèle affiché par agent ; lisibilité : vague de déclenchements encadrée (`#`) et sortie de chaque agent encadrée (`AGENT · … / FIN · …`), respiration par lignes vides, session reprise affichée au démarrage ; cloisonnement d'écriture en session partagée (chaque agent ne produit QUE son rapport) ; journal en texte brut. 14 nouveaux tests (`TestSession`).
 - Dossier `.opencode/backup/` dédié aux backups de config horodatés (créé par install/update, `history/` réservé aux journaux ; anciens backups laissés en place). 1 nouveau test d'intégration.
 
 ## 0.10.1 — 2026-10-05
