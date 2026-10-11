@@ -40,6 +40,10 @@ Ali n'intervient que si la tâche a une composante visuelle, et toujours après 
 
 Chaque agent lit d'abord la configuration et les règles du projet courant. Aucun fichier d'agent ne doit contenir un nom de projet en dur. Les réponses et rapports sont rédigés en français, sauf demande contraire de l'utilisateur. Emojis proscrits dans le travail, tolérés uniquement en échange léger ou blague. Typographie française correcte exigée : accents, apostrophes, cédilles.
 
+## Lecture frugale
+
+Le contexte est une ressource mesurée : chaque fiche agent (`core/agents/*/instructions.md`, régénérées vers `runtimes/opencode/agents/` par `engine/renderer.py`) impose de relire d'abord son précédent rapport, de ne lire ensuite que les fichiers modifiés (`git status`, horodatages) et de traiter les rapports des autres agents comme des acquis (verdicts lus, vérifications non refaites). Vérifications lourdes réservées aux fichiers changés. L'effort est proportionné à l'ampleur du changement : contenu statique ou retouche ciblée → contrôles ciblés sans rejouer lint/build complets ; refonte, logique, formulaires, données ou sécurité → vérification complète ; doute → complet.
+
 ## Identité visuelle
 
 Chaque agent déclare sa couleur en frontmatter (`color`, hexadécimal `#RRGGBB` exigé par OpenCode) : Lawibrahim `#8B5CF6`, Ali `#3B82F6`, Bamse `#22C55E`, Hadji `#F59E0B`, Hifadhui `#EF4444`, Zawadi `#14B8A6`.
