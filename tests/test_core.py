@@ -267,6 +267,16 @@ class TestStateReconcile(unittest.TestCase):
         self.assertNotIn("implementation", wf["completed_stages"])
         self.assertTrue(any("corrections" in n for n in notes), notes)
 
+    def test_qa_a_completer_rouvre_implementation(self):
+        from state import reconcile
+        tmp = self._project({"build.txt": self._report("FEATURE-001", "builder", "TERMINÉ"),
+                             "qa.txt": self._report("FEATURE-001", "qa", "À COMPLÉTER")})
+        state, notes = reconcile(tmp, "FEATURE-001")
+        wf = state["workflow"]
+        self.assertNotIn("implementation", wf["completed_stages"])
+        self.assertIn("implementation", wf["pending_stages"])
+        self.assertTrue(any("compléter" in n for n in notes), notes)
+
     def test_review_sans_build_bloquee(self):
         from state import reconcile
         tmp = self._project({"review.txt": self._report("FEATURE-001", "reviewer", "VALIDÉ")})
@@ -317,7 +327,7 @@ class TestWatcherEngine(unittest.TestCase):
         self.assertIsNone(err, err)
         usable, notes = w.select_auto_stages(cfg)
         self.assertEqual([s["id"] for s in usable],
-                         ["review", "security", "visual_qa", "rework"])
+                         ["review", "security", "visual_qa", "rework", "rework_qa"])
         self.assertEqual(notes, [])
 
     def test_eligibilite(self):
@@ -452,7 +462,7 @@ class TestConditions(unittest.TestCase):
         w = self._watcher()
         data = self._cfg()
         usable, _ = w.select_auto_stages(data)
-        self.assertEqual([s["id"] for s in usable], ["review", "security", "visual_qa", "rework"])
+        self.assertEqual([s["id"] for s in usable], ["review", "security", "visual_qa", "rework", "rework_qa"])
         cfg = {"stages": usable}
         build = {"build.txt": {"task_id": "F-1", "status": "TERMINÉ", "mtime": 100.0, "hash": "h"}}
         off = {"security_required": False, "visual_qa_required": False, "design_required": False}
@@ -478,6 +488,27 @@ class TestConditions(unittest.TestCase):
         trig2 = {"build.txt": {"task_id": "F-1", "status": "TERMINÉ", "mtime": 300.0, "hash": "h2"},
                  "review.txt": {"task_id": "F-1", "status": "CORRECTIONS NÉCESSAIRES",
                                 "mtime": 200.0, "hash": "h"}}
+        got2 = sorted(s["id"] for s, _, _ in w.eligible_transitions(cfg, trig2, off, outs_frais))
+        self.assertEqual(got2, ["review"])
+
+    def test_rework_qa_a_completer(self):
+        # FEATURE-007 : qa.txt À COMPLÉTER rappelle Bamse (action env
+        # attendue : purge cache, relance frontal), sauf build plus récent.
+        w = self._watcher()
+        data = self._cfg()
+        usable, _ = w.select_auto_stages(data)
+        cfg = {"stages": usable}
+        off = {"security_required": False, "visual_qa_required": False, "design_required": False}
+        trig = {"qa.txt": {"task_id": "F-1", "status": "À COMPLÉTER",
+                           "mtime": 200.0, "hash": "h"}}
+        outs = {"build.txt": {"task_id": "F-1", "mtime": 100.0}}
+        got = [s["id"] for s, _, _ in w.eligible_transitions(cfg, trig, off, outs)]
+        self.assertEqual(got, ["rework_qa"])
+        # Bamse a déjà re-livré : on ne le rappelle pas.
+        outs_frais = {"build.txt": {"task_id": "F-1", "mtime": 300.0}}
+        trig2 = {"build.txt": {"task_id": "F-1", "status": "TERMINÉ", "mtime": 300.0, "hash": "h2"},
+                 "qa.txt": {"task_id": "F-1", "status": "À COMPLÉTER",
+                            "mtime": 200.0, "hash": "h"}}
         got2 = sorted(s["id"] for s, _, _ in w.eligible_transitions(cfg, trig2, off, outs_frais))
         self.assertEqual(got2, ["review"])
 
@@ -623,6 +654,32 @@ class TestParallel(unittest.TestCase):
         self.assertEqual(w.classify_failure(r), "network")
         r.stdout, r.stderr = "Unknown error from agent", ""
         self.assertEqual(w.classify_failure(r), "other")
+
+    def test_quota_circuit_breaker(self):
+        import importlib.util
+        import tempfile
+        from pathlib import Path as _Path
+        spec = importlib.util.spec_from_file_location(
+            "watch_work_q", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        w = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(w)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _Path(tmp)
+            (root / ".opencode" / "resume").mkdir(parents=True)
+            (root / ".opencode" / "history").mkdir(parents=True)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            stage = {"id": "review", "agent": "reviewer",
+                     "trigger": {"report": "build.txt", "status": "TERMINÉ"}}
+            real_trigger = w.trigger_stage
+            w.trigger_stage = lambda *a, **k: (False, "quota")
+            try:
+                ok, done, failed = w.run_branches(root, [("k1", stage, "F-1", "test")], 1)
+            finally:
+                w.trigger_stage = real_trigger
+            self.assertFalse(ok)
+            self.assertEqual(failed[0][2], "quota")
+            log = (root / ".opencode" / "history" / "workflow-log.md").read_text(encoding="utf-8")
+            self.assertIn("QUOTA", log)
 
 
 class TestServices(unittest.TestCase):
@@ -860,6 +917,29 @@ class TestSession(unittest.TestCase):
             self.assertEqual(w.get_session_state(root, "F-1", "zawadi")["id"], "ses_b")
             self.assertFalse(w.adopt_session_if_absent(root, "AUTRE", "hadji", row_b))
 
+    def test_adopt_session_baselines_zero_puis_stats_reelles(self):
+        # Régression FEATURE-007 : baselines post-run => usage 0 affiché
+        # alors que le journal montrait les vrais tokens. Une session
+        # neuve part de 0, tout son contenu est neuf.
+        w = self._watcher()
+        with tempfile.TemporaryDirectory() as tmp:
+            from pathlib import Path as _Path
+            root = _Path(tmp)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
+            row = {"id": "ses_n", "tokens_input": 40000, "tokens_output": 13983,
+                   "tokens_cache_read": 999, "tokens_cache_write": 0,
+                   "time_compacting": None, "model": "m", "cost": 0.0}
+            self.assertTrue(w.adopt_session_if_absent(root, "F-1", "hadji", row))
+            block = w.get_session_state(root, "F-1", "hadji")
+            self.assertEqual(int(block["baseline_input"]), 0)
+            self.assertEqual(int(block["baseline_output"]), 0)
+            self.assertEqual(int(block["baseline_cache_write"]), 0)
+            w.note_session_stats(root, "F-1", "hadji", row, block, 1048576)
+            shown = w.get_session_state(root, "F-1", "hadji")
+            self.assertEqual(int(shown["used_tokens"]), 53983)
+            self.assertGreater(float(shown["usage"]), 0.0)
+
     def test_isolation_clause(self):
         w = self._watcher()
         for agent, own in (("builder", "build.txt"), ("reviewer", "review.txt"),
@@ -1054,6 +1134,71 @@ class TestSession(unittest.TestCase):
             self.assertIn("observed_at", block)
             text = (root / ".opencode" / "state" / "workflow-state.yaml").read_text(encoding="utf-8")
             self.assertIn("used_tokens:", text)
+
+    def test_clean_stop_roundtrip(self):
+        w = self._watcher()
+        import tempfile
+        from pathlib import Path as _Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _Path(tmp)
+            self.assertIsNone(w.read_clean_stop(root))
+            w.write_clean_stop(root)
+            stamp = w.read_clean_stop(root)
+            self.assertTrue(stamp and "T" in stamp)
+            w.clear_clean_stop(root)
+            self.assertIsNone(w.read_clean_stop(root))
+
+    def test_diagnose_restart_interruption(self):
+        w = self._watcher()
+        import io
+        import sys
+        import tempfile
+        from pathlib import Path as _Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _Path(tmp)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            (root / ".opencode" / "history").mkdir(parents=True)
+            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS",
+                                         "running_agents": ["hadji"]})
+            (root / ".opencode" / "history" / "workflow-log.md").write_text(
+                "- [2026-10-11 00:00:01] build.txt TERMINÉ (F-1) -> appel de hadji\n",
+                encoding="utf-8")
+            buf = io.StringIO()
+            old = sys.stdout
+            sys.stdout = buf
+            try:
+                w.diagnose_restart(root)
+            finally:
+                sys.stdout = old
+            out = buf.getvalue()
+            self.assertIn("interruption", out)
+            self.assertIn("hadji", out)
+            self.assertIn("pas de marqueur", out)
+            running = w.read_state_minimal(root).get("running_agents")
+            self.assertEqual(w._flow_items(running or "[]"), [])
+
+    def test_diagnose_restart_propre(self):
+        w = self._watcher()
+        import io
+        import sys
+        import tempfile
+        from pathlib import Path as _Path
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _Path(tmp)
+            (root / ".opencode" / "state").mkdir(parents=True)
+            (root / ".opencode" / "history").mkdir(parents=True)
+            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
+            w.write_clean_stop(root)
+            buf = io.StringIO()
+            old = sys.stdout
+            sys.stdout = buf
+            try:
+                w.diagnose_restart(root)
+            finally:
+                sys.stdout = old
+            out = buf.getvalue()
+            self.assertIn("arrêt propre", out)
+            self.assertIsNone(w.read_clean_stop(root))
 
     def test_attribution_session_par_titre(self):
         w = self._watcher()

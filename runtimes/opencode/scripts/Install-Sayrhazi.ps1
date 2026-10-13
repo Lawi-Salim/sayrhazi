@@ -60,6 +60,12 @@ if (Test-Path -LiteralPath $watcherSource) {
     Copy-Item $watcherSource (Join-Path $opencode 'watch-work.py') -Force
 }
 
+# Le dashboard TUI aussi (lecture seule, même cycle de vie que le watcher).
+$tuiSource = Join-Path $adapterRoot 'scripts/watch-tui.py'
+if (Test-Path -LiteralPath $tuiSource) {
+    Copy-Item $tuiSource (Join-Path $opencode 'watch-tui.py') -Force
+}
+
 # Le gestionnaire de services aussi (séparé du moteur d'agents).
 $servicesSource = Join-Path $adapterRoot 'scripts/services.py'
 if (Test-Path -LiteralPath $servicesSource) {

@@ -44,7 +44,7 @@ Les problèmes sont classés `CRITIQUE`, `HAUTE`, `MOYENNE` ou `FAIBLE`. Un rapp
 * Bamse (`build.txt`) : `EN COURS`, `TERMINÉ` ou `BLOQUÉ`.
 * Ali (`design.txt`) : `PROPOSÉ` ou `VALIDÉ`.
 * Hadji (`review.txt`) et Hifadhui (`security.txt`) : `VALIDÉ`, `VALIDÉ AVEC RÉSERVES` ou `CORRECTIONS NÉCESSAIRES`.
-* Zawadi (`qa.txt`) : mêmes verdicts, plus `À COMPLÉTER` lorsque l'observation réelle manque.
+* Zawadi (`qa.txt`) : mêmes verdicts, plus `À COMPLÉTER` lorsque l'observation réelle manque — ce verdict rappelle Bamse automatiquement (`rework_qa`, sauf `build.txt` plus récent).
 
 ## Contrat minimal d'une tâche
 

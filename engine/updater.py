@@ -154,6 +154,10 @@ def main() -> int:
     if watcher.is_file():
         shutil.copy2(watcher, opencode / "watch-work.py")
         updated += 1
+    tui = core / "runtimes" / "opencode" / "scripts" / "watch-tui.py"
+    if tui.is_file():
+        shutil.copy2(tui, opencode / "watch-tui.py")
+        updated += 1
     services = core / "runtimes" / "opencode" / "scripts" / "services.py"
     if services.is_file():
         shutil.copy2(services, opencode / "services.py")

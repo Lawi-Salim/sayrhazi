@@ -3,7 +3,8 @@
 # Les étapes désignent des rôles stables, jamais des noms d'affichage.
 # `auto: true` = transition prise en charge par le watcher ; `auto: false` =
 # orchestration humaine. Automatiques : review, security et visual_qa (si
-# requis dans sayrhazi.yaml), rework (retour vers builder sur CORRECTIONS).
+# requis dans sayrhazi.yaml), rework (retour vers builder sur CORRECTIONS),
+# rework_qa (retour vers builder sur qa.txt À COMPLÉTER).
 # Vérifié par `tunda sayrhazi` (présence + validité, jamais bloquant).
 workflow:
   mode: supervised
@@ -54,4 +55,11 @@ stages:
     trigger:
       report: review.txt
       status: CORRECTIONS NÉCESSAIRES
+    auto: true
+
+  - id: rework_qa
+    agent: builder
+    trigger:
+      report: qa.txt
+      status: À COMPLÉTER
     auto: true

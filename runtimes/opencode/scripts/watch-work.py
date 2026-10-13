@@ -19,10 +19,11 @@ publie / supprime rien.
 Sans dépendance externe. Windows / macOS / Linux.
 
 Usage :
-    python .opencode/watch-work.py [--once] [--check] [--timeout SEC]
+    python .opencode/watch-work.py [--once] [--check] [--timeout SEC] [--continue]
     --once    : une seule vérification puis sortie (0 = déclenché, 1 = rien)
     --check   : valide config sans surveiller (idéal pour tests)
     --timeout : durée max de surveillance en secondes (0 = infini)
+    --continue: diagnostic de l'arrêt précédent (causes, purge) puis reprise
 """
 
 import argparse
@@ -740,6 +741,98 @@ def release_lock(project_root: Path) -> None:
             pass
 
 
+def clean_stop_path(project_root: Path) -> Path:
+    return project_root / ".opencode" / "state" / "clean_stop"
+
+
+def write_clean_stop(project_root: Path) -> None:
+    """Marqueur d'arrêt propre (Ctrl+C géré). Absent = arrêt brutal."""
+    try:
+        path = clean_stop_path(project_root)
+        os.makedirs(str(path.parent), exist_ok=True)
+        path.write_text(datetime.now().astimezone().replace(microsecond=0).isoformat(),
+                        encoding="utf-8")
+    except OSError:
+        pass
+
+
+def read_clean_stop(project_root: Path) -> Optional[str]:
+    try:
+        text = clean_stop_path(project_root).read_text(encoding="utf-8", errors="replace").strip()
+        return text or None
+    except OSError:
+        return None
+
+
+def clear_clean_stop(project_root: Path) -> None:
+    try:
+        clean_stop_path(project_root).unlink()
+    except OSError:
+        pass
+
+
+def diagnose_restart(project_root: Path) -> None:
+    """Diagnostic `--continue` : causes de l'arrêt précédent, purge, reprise.
+
+    Preuves durables uniquement (journal append-only, état, marqueur) :
+    un Ctrl+C au repos laisse un marqueur propre et aucun agent en cours ;
+    un arrêt brutal laisse des agents en cours et/ou des appels sans
+    terminaison au journal. Purge les marqueurs périmés, la boucle
+    normale reprend le travail inachevé.
+    """
+    log("diagnostic --continue : analyse de l'arrêt précédent...")
+    state = read_state_minimal(project_root)
+    task_id = str(state.get("task_id") or "")
+    running = state.get("running_agents")
+    running = running if isinstance(running, list) else _flow_items(running or "[]")
+    marker = read_clean_stop(project_root)
+    clear_clean_stop(project_root)
+    if marker:
+        log(f"arrêt propre (Ctrl+C) le {marker}.")
+    else:
+        log("pas de marqueur d'arrêt propre (terminal fermé ou processus tué ?).")
+    if running and task_id:
+        log(f"interruption : {', '.join(running)} retrouvé(s) en cours sur {task_id}"
+            f" — purge, reprise au prochain cycle.")
+        journal(project_root, f"interruption détectée (--continue) : {', '.join(running)}"
+                              f" en cours sur {task_id}, purge")
+        with _SHARED_LOCK:
+            write_state_minimal(project_root, {"running_agents": []})
+    elif task_id:
+        log(f"aucun agent en cours sur {task_id}.")
+    else:
+        log("aucune tâche suivie.")
+    try:
+        lines = (project_root / ".opencode" / "history" / "workflow-log.md").read_text(
+            encoding="utf-8", errors="replace").splitlines()[-40:]
+    except OSError:
+        lines = []
+    pending: dict = {}
+    for line in lines:
+        match = re.search(r"appel de (\w+)", line)
+        if match:
+            pending[match.group(1)] = line
+            continue
+        done = re.search(r"(\w+) (terminé|terminée|échoué|échouée)\b", line)
+        if done and done.group(1) in pending:
+            pending.pop(done.group(1), None)
+            continue
+        if "timeout" in line.lower() or "QUOTA" in line or "rotation" in line:
+            for name in list(pending):
+                if name in line:
+                    pending.pop(name, None)
+    for name in sorted(pending):
+        log(f"interruption en cours de {name} (appel sans terminaison au journal).")
+    if any("QUOTA" in line for line in lines):
+        log("pause quota enregistrée (oubliée au redémarrage : la reprise retentera).")
+    adopted = state.get("session")
+    adopted = [n for n, b in (adopted if isinstance(adopted, dict) else {}).items()
+               if isinstance(b, dict) and str(b.get("id") or "")]
+    if adopted and task_id:
+        log(f"sessions reprises : {', '.join(sorted(adopted))} sur {task_id}.")
+    journal(project_root, "diagnostic --continue effectué.")
+
+
 def journal(project_root: Path, message: str) -> None:
     """Archive un événement dans history/workflow-log.md."""
     try:
@@ -949,7 +1042,14 @@ def set_session_state(project_root: Path, task_id: str, agent: str, session: dic
 
 
 def adopt_session_if_absent(project_root: Path, task_id: str, agent: str, row: dict) -> bool:
-    """Adopte la session de l'agent si aucune n'est persistée."""
+    """Adopte la session de l'agent si aucune n'est persistée.
+
+    Baselines à 0 : la session vient d'être créée par notre appel
+    (`--title Sayrhazi <task> <agent>`, sans `--session` réutilisé),
+    donc tout son contenu est neuf. Mettre les compteurs post-run
+    en baseline annulerait le premier run (usage 0 affiché alors que
+    le journal montre les vrais tokens — constaté FEATURE-007).
+    """
     with _SHARED_LOCK:
         current = read_state_minimal(project_root)
         if current.get("task_id") != task_id:
@@ -961,10 +1061,10 @@ def adopt_session_if_absent(project_root: Path, task_id: str, agent: str, row: d
                 return False
         mapping = dict(sess) if isinstance(sess, dict) else {}
         mapping[agent] = {
-            "id": row.get("id"), "baseline_input": row.get("tokens_input") or 0,
-            "baseline_cache": row.get("tokens_cache_read") or 0,
-            "baseline_cache_write": row.get("tokens_cache_write") or 0,
-            "baseline_output": row.get("tokens_output") or 0,
+            "id": row.get("id"), "baseline_input": 0,
+            "baseline_cache": 0,
+            "baseline_cache_write": 0,
+            "baseline_output": 0,
             "compacted_at": row.get("time_compacting") or "",
             "model": parse_model_id(row.get("model"))}
         write_state_minimal(project_root, {"task_id": task_id, "status": "IN_PROGRESS",
@@ -1096,12 +1196,15 @@ def run_branches(project_root: Path, items: list, workers: int) -> tuple:
     """
     done: list = []
     failed: list = []
-    if items:
-        sids = sorted({(stage.get("id", "?") or "?") for _k, stage, _t, _w in items})
-        wave = f"vague : {', '.join(sids)} ({items[0][2]})"
-        print()
-        log("########## " + wave + " ##########")
-        journal(project_root, wave)
+    if not items:
+        return False, done, failed
+
+    sids = sorted({(stage.get("id", "?") or "?") for _k, stage, _t, _w in items})
+    wave = f"vague : {', '.join(sids)} ({items[0][2]})"
+    print()
+    log("########## " + wave + " ##########")
+    journal(project_root, wave)
+
     if len(items) <= 1:
         for key, stage, task_id, why in items:
             log(f"État : {why}")
@@ -1110,14 +1213,21 @@ def run_branches(project_root: Path, items: list, workers: int) -> tuple:
                 done.append(key)
             else:
                 failed.append((key, stage.get("id", "?"), kind))
+                if kind == "quota":
+                    log(f"⚠ QUOTA atteint par {stage.get('agent')} — attente de réinitialisation.")
+                    journal(project_root, f"QUOTA : pause ({stage.get('agent')})")
+                    return False, done, failed
                 log("Échec déclenchement, on réessaiera au prochain passage.")
         return bool(done), done, failed
-    for _key, stage, task_id, why in items:
-        log(f"État : {why}")
+
+    quota_hit = False
+    quota_agent = None
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, workers),
                                                thread_name_prefix="sayrhazi") as pool:
         futures = {pool.submit(_run_branch, project_root, stage, task_id): (key, stage.get("id", "?"))
                    for key, stage, task_id, _why in items}
+        quota_hit = False
+        quota_agent = None
         for future in concurrent.futures.as_completed(futures):
             key, sid = futures[future]
             try:
@@ -1130,7 +1240,14 @@ def run_branches(project_root: Path, items: list, workers: int) -> tuple:
                 done.append(key)
             else:
                 failed.append((key, sid, kind))
-                log("Échec déclenchement, on réessaiera au prochain passage.")
+                if kind == "quota":
+                    quota_hit = True
+                    quota_agent = stage.get("agent")
+                    log(f"⚠ QUOTA atteint par {stage.get('agent')} — mise en pause de la vague.")
+        if quota_hit:
+            log(f"⚠ QUOTA global détecté ({quota_agent}) — vague en pause. Attente de réinitialisation du quota.")
+            journal(project_root, f"QUOTA global : pause vague ({quota_agent})")
+            return False, done, failed
     names = {key: stage.get("id", "?") for key, stage, _t, _w in items}
     kinds = {key: kind for key, _sid, kind in failed}
     parts = ([f"{names[k]} OK" for k in sorted(done, key=names.get)]
@@ -1265,7 +1382,7 @@ def trigger_stage(project_root: Path, stage: dict, task_id: str) -> Tuple[bool, 
     call = f"{trigger.get('report')} {trigger.get('status')} ({task_id}) -> appel de {agent_file}"
     if model_short:
         call += f" [{model_short}]"
-        journal(project_root, call + f" (modèle {full_model})")
+    journal(project_root, call + (f" (modèle {full_model})" if model_short else ""))
     log(call + "...")
     start = time.time()
     start_ms = int(start * 1000)
@@ -1403,6 +1520,8 @@ def main() -> int:
     parser.add_argument("--once", action="store_true", help="une seule vérification")
     parser.add_argument("--check", action="store_true", help="valide config sans surveiller")
     parser.add_argument("--timeout", type=int, default=0, help="durée max en secondes (0=infini)")
+    parser.add_argument("--continue", dest="cont", action="store_true",
+                        help="diagnostic de l'arrêt précédent puis reprise")
     args = parser.parse_args()
 
     root = find_project_root(Path.cwd())
@@ -1498,6 +1617,8 @@ def log_startup_session(project_root: Path) -> None:
 
 def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
     """Boucle moteur : toute transition déclarée et éligible est déclenchée."""
+    if getattr(args, "cont", False):
+        diagnose_restart(root)
     watched = watched_reports(usable)
     log("Surveillance de : " + ", ".join(str(root / ".opencode" / "resume" / name) for name in watched))
     log_startup_session(root)
@@ -1629,12 +1750,15 @@ def run_generic(root: Path, args, config: Optional[dict], usable: list) -> int:
                 last_touch = time.time()
             time.sleep(POLL_INTERVAL_SECONDS)
     except KeyboardInterrupt:
+        write_clean_stop(root)
         log("Arrêt (Ctrl+C).")
         return 0
 
 
 def run_legacy(root: Path, args, build_file: Path) -> int:
     """Chemin historique build.txt TERMINÉ -> Hadji (sans config)."""
+    if getattr(args, "cont", False):
+        diagnose_restart(root)
     log(f"Surveillance de : {build_file}")
     last_trigger = ""
     last_touch = time.time()
@@ -1671,6 +1795,7 @@ def run_legacy(root: Path, args, build_file: Path) -> int:
                 last_touch = time.time()
             time.sleep(POLL_INTERVAL_SECONDS)
     except KeyboardInterrupt:
+        write_clean_stop(root)
         log("Arrêt (Ctrl+C).")
         return 0
 

@@ -43,7 +43,8 @@ DEFAULT_TRIGGERS = {"planning": None, "design": "plan.txt",
                     "implementation": "plan.txt", "review": "build.txt",
                     "security": "build.txt", "visual_qa": "build.txt"}
 
-# Statuts qui achèvent l'étape (le reste = non terminé ; CORRECTIONS rouvre builder).
+# Statuts qui achèvent l'étape (le reste = non terminé ; CORRECTIONS et
+# qa.txt À COMPLÉTER rouvrent builder).
 FINAL_STATUSES = {"architect": ("VALIDÉ",), "designer": ("VALIDÉ",),
                   "builder": ("TERMINÉ",),
                   "reviewer": ("VALIDÉ", "VALIDÉ AVEC RÉSERVES"),
@@ -269,6 +270,15 @@ def reconcile(project_root: Path | str, task_id: str | None = None) -> tuple[dic
             if "implementation" not in pending:
                 pending.append("implementation")
             notes.append(f"{rep} demande des corrections : implementation à reprendre")
+    # Un qa.txt À COMPLÉTER rouvre aussi l'implémentation (Zawadi attend
+    # une action de Bamse : purge cache, relance frontal, fix env).
+    qa_data = valid.get("qa.txt")
+    if qa_data is not None and normalize_status(qa_data.get("status", "")) == "À COMPLÉTER":
+        if "implementation" in completed:
+            completed.remove("implementation")
+        if "implementation" not in pending:
+            pending.append("implementation")
+        notes.append("qa.txt à compléter : implementation à reprendre")
 
     current = [s for s in pending if triggers.get(s) is None or triggers.get(s) in valid]
     waiting = [s for s in pending if s not in current]
