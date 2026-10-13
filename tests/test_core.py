@@ -17,6 +17,23 @@ sys.path.insert(0, str(ROOT / "cli" / "commands"))
 from sayrhazi_config import load_schema, parse_simple_yaml, validate_against_schema  # noqa: E402
 
 
+class TestVersionConsistency(unittest.TestCase):
+    def test_version_partout(self):
+        import re
+        version = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertRegex(version, r"^\d+\.\d+\.\d+$")
+        pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn(f'version = "{version}"', pyproject)
+        template = (ROOT / "runtimes" / "opencode" / "templates" / "sayrhazi.yaml").read_text(
+            encoding="utf-8")
+        self.assertIn(f'version: "{version}"', template)
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(f"v{version} - sayrhazi", readme)
+        changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertTrue(changelog.startswith(f"## {version} ")
+                        or f"\n## {version} " in changelog)
+
+
 class TestParser(unittest.TestCase):
     def test_template_se_parse(self):
         text = (ROOT / "runtimes" / "opencode" / "templates" / "sayrhazi.yaml").read_text(encoding="utf-8")
