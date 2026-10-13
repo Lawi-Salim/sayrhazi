@@ -5,7 +5,8 @@
 # noms d'affichage. Validateur : engine/workflow.py. Modèle projet :
 # runtimes/opencode/templates/workflow.yaml.
 # Sont automatiques : review (toujours), security et visual_qa (si requis),
-# rework (retour vers builder sur CORRECTIONS). `auto: false` = humain.
+# rework (retour vers builder sur CORRECTIONS), rework_qa (retour vers
+# builder sur qa.txt À COMPLÉTER). `auto: false` = humain.
 workflow:
   mode: supervised
   auto_start: false
@@ -55,4 +56,11 @@ stages:
     trigger:
       report: review.txt
       status: CORRECTIONS NÉCESSAIRES
+    auto: true
+
+  - id: rework_qa
+    agent: builder
+    trigger:
+      report: qa.txt
+      status: À COMPLÉTER
     auto: true

@@ -43,6 +43,10 @@ def install_project(project: Path, core: Path) -> None:
     if services.is_file():
         shutil.copy2(services, opencode / "services.py")
 
+    tui = core / "runtimes" / "opencode" / "scripts" / "watch-tui.py"
+    if tui.is_file():
+        shutil.copy2(tui, opencode / "watch-tui.py")
+
     readme = project / "SAYRHAZI-README.md"
     if not readme.is_file():
         readme.write_text(

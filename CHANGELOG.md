@@ -1,4 +1,11 @@
-# Changelog Sayrhazi
+## 0.12.0 — 2026-10-12
+
+- Reprise après interruption (`--continue`) : marqueur d'arrêt propre au Ctrl+C au repos, diagnostic au redémarrage (marqueur, agents en cours purgés, appels sans terminaison au journal, pause quota, sessions reprises), puis reprise du travail inachevé. 3 nouveaux tests.
+
+- Dashboard TUI `watch-tui.py` (`textual`) : vraie interface (alternate screen, raw mode, tableau 6 agents, logs, refresh auto) + mode `--once` ; copié par install/update vers `.opencode/`. Repli base locale : sans bloc suivi (agents manuels Lawibrahim/Ali/Bamse), affiche la dernière session DB (`~` = cumulé, borne haute).
+- Nouveau stage `rework_qa` : `qa.txt À COMPLÉTER` rappelle Bamse automatiquement (Zawadi attend une action — purge cache, relance frontal, fix env — puis recontrôle ; garde anti-boucle : pas de rappel si `build.txt` plus récent). Contrat (`core/workflow/workflow.yaml`, template), réconciliation (`engine/state.py` rouvre l'implémentation), docs (`automation.md`, `reports.md`). Les `workflow.yaml` existants (jamais écrasés) doivent ajouter le stage manuellement. 2 nouveaux tests.
+- Fix sessions : baselines à 0 à l'adoption d'une session neuve (tout son contenu est neuf) — corrige l'usage/tokens à 0 dans l'état et le TUI alors que le journal montrait les vraies valeurs (constaté FEATURE-007 : `usage 0 % · 0 tokens` vs `usage 5 % · 53 983 tokens`). 1 nouveau test.
+- Circuit breaker quota : dès qu'un agent renvoie quota/rate-limit, la vague entière est mise en pause (plus de retry infini), alerte journalisée, reprise manuelle après réinitialisation du quota. 1 nouveau test.
 
 ## 0.11.1 — 2026-10-10
 
