@@ -18,12 +18,25 @@ from pathlib import Path
 COMMANDS = ("install", "check", "update", "remove", "info")
 
 
+def _version() -> str:
+    try:
+        return (Path(__file__).resolve().parent.parent / "VERSION").read_text(
+            encoding="utf-8").strip()
+    except OSError:
+        return "?"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="CLI Sayrhazi")
-    parser.add_argument("command", choices=COMMANDS)
+    parser.add_argument("--version", action="store_true", help="affiche la version")
+    parser.add_argument("command", choices=COMMANDS, nargs="?")
     parser.add_argument("--project", default=".")
     parser.add_argument("--yes", action="store_true", help="remove : supprimer vraiment (defaut : simulation)")
     args = parser.parse_args()
+
+    if args.version or not args.command:
+        print(_version())
+        return 0
 
     here = Path(__file__).resolve().parent
     target = here / "commands" / (args.command + ".py")
