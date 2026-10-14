@@ -32,6 +32,8 @@ class TestVersionConsistency(unittest.TestCase):
         changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
         self.assertTrue(changelog.startswith(f"## {version} ")
                         or f"\n## {version} " in changelog)
+        package = (ROOT / "package.json").read_text(encoding="utf-8")
+        self.assertIn(f'"version": "{version}"', package)
 
 
 class TestParser(unittest.TestCase):

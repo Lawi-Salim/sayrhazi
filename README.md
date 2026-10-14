@@ -125,10 +125,22 @@ Chaque projet possède sa propre copie de `.opencode/agent/` (`sayrhazi.yaml`, `
 
 ## Installation dans un projet
 
-Depuis n'importe quel projet (inutile d'ouvrir le dépôt Sayrhazi) :
+Prérequis : Python ≥ 3.10, Node.js LTS, `npm install -g opencode-ai` (tier gratuit, sans login manuel).
 
 ```powershell
-& "C:\Users\Lawibrahim\Documents\Sayrhazi\runtimes\opencode\scripts\Install-Sayrhazi.ps1" -ProjectPath "."
+npm install -g sayrhazi
+```
+
+Puis, depuis n'importe quel projet :
+
+```powershell
+sayrhazi .
+```
+
+Sans npm, depuis un clone du dépôt (`https://github.com/Lawi-Salim/sayrhazi.git`) :
+
+```powershell
+& "<clone>\runtimes\opencode\scripts\Install-Sayrhazi.ps1" -ProjectPath "."
 ```
 
 Avec les fonctions de profil : `Sayrhazi .` (installe + contrôle), `tunda sayrhazi` (check détaillé : structure, 6 agents, 0 `A_COMPLETER`, JSON valide, watcher, contrat des rapports signalé sans bloquer).
