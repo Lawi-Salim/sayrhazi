@@ -1,3 +1,7 @@
+## 0.12.1 — 2026-10-14
+
+- CLI : `sayrhazi --version` affiche la version (et invocation sans commande) au lieu d'une erreur argparse.
+
 ## 0.12.0 — 2026-10-12
 
 - Reprise après interruption (`--continue`) : marqueur d'arrêt propre au Ctrl+C au repos, diagnostic au redémarrage (marqueur, agents en cours purgés, appels sans terminaison au journal, pause quota, sessions reprises), puis reprise du travail inachevé. 3 nouveaux tests.
