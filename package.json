@@ -1,6 +1,6 @@
 {
   "name": "sayrhazi",
-  "version": "0.12.0",
+  "version": "0.12.1",
   "description": "Workflow multi-agents portable (moteur Python, stdlib uniquement)",
   "bin": {
     "sayrhazi": "bin/sayrhazi.js"
