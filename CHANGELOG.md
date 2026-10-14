@@ -1,3 +1,8 @@
+## 0.12.2 — 2026-10-14
+
+- Profil versionné (`Sayrhazi-Profile.ps1`) : fonctions `Sayrhazi/tunda/update/info/remove` sourcées depuis le dépôt, flags (`--version`) routés vers le CLI au lieu de l'installeur.
+- Zéro chemin machine en dur : `README.md` et `docs/installation.md` passent à npm/clone génériques (vérifié par recherche).
+
 ## 0.12.1 — 2026-10-14
 
 - CLI : `sayrhazi --version` affiche la version (et invocation sans commande) au lieu d'une erreur argparse.

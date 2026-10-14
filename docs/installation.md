@@ -6,13 +6,25 @@ L'installation nécessite uniquement un projet existant, Git est recommandé, et
 
 ## Depuis n'importe quel projet (recommandé)
 
-Inutile d'ouvrir le dépôt Sayrhazi : le script retrouve sa source tout seul. Depuis le projet cible :
+Via npm (pas de clone requis) :
 
 ```powershell
-& "C:\Users\Lawibrahim\Documents\Sayrhazi\runtimes\opencode\scripts\Install-Sayrhazi.ps1" -ProjectPath "."
+npm install -g sayrhazi
 ```
 
-Avec la fonction de profil (voir `SAYRHAZI_HOME`) :
+Puis, depuis le projet cible :
+
+```powershell
+sayrhazi .
+```
+
+Depuis un clone du dépôt (`https://github.com/Lawi-Salim/sayrhazi.git`), le script retrouve sa source tout seul :
+
+```powershell
+& "<clone>\runtimes\opencode\scripts\Install-Sayrhazi.ps1" -ProjectPath "."
+```
+
+Avec les fonctions de profil (sourcées depuis `Sayrhazi-Profile.ps1` du dépôt) :
 
 ```powershell
 Sayrhazi .
@@ -22,8 +34,8 @@ tunda sayrhazi
 ## Depuis le dépôt Sayrhazi
 
 ```powershell
-cd C:\Users\Lawibrahim\Documents\Sayrhazi
-.\runtimes\opencode\scripts\Install-Sayrhazi.ps1 -ProjectPath "C:\Users\Lawibrahim\Documents\MonProjet"
+cd <clone>
+.\runtimes\opencode\scripts\Install-Sayrhazi.ps1 -ProjectPath "C:\chemin\vers\MonProjet"
 ```
 
 ## Linux et macOS
