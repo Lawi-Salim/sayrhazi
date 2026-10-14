@@ -1,3 +1,10 @@
+## 0.12.3 — 2026-10-14
+
+- Lawibrahim exige un cahier des charges d'abord : sur projet neuf, cherche `cahier-des-charges.md`/`SPEC.md`/`spec.md`, le demande s'il est absent (sans lui, pas de `plan.txt`), le lit une fois puis seulement en cas d'ambiguïté. 1 nouveau test.
+- npm : le `postinstall` indique comment sourcer les fonctions terminal (`Sayrhazi/tunda/update/info`) depuis le paquet installé.
+- Pendant bash (`Sayrhazi-Profile.sh`) : `Sayrhazi/tunda/update/info/remove` pour Ubuntu, `Sayrhazi` et `sayrhazi` coexistent (casse sensible).
+- CLI harmonisé : `sayrhazi` nu installe + contrôle dans `--project` (comme la fonction de profil), `--version` affiche la version.
+
 ## 0.12.2 — 2026-10-14
 
 - Profil versionné (`Sayrhazi-Profile.ps1`) : fonctions `Sayrhazi/tunda/update/info/remove` sourcées depuis le dépôt, flags (`--version`) routés vers le CLI au lieu de l'installeur.

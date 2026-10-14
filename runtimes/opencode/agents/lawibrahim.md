@@ -28,6 +28,10 @@ Le contexte est une ressource mesurée : chaque fichier relu et chaque sortie d'
 
 Proportionne ton effort à l'ampleur du changement : contenu statique ou retouche ciblée → contrôles ciblés sur les fichiers touchés, sans rejouer lint/build complets ni scans larges ; refonte, logique, formulaires, données ou sécurité → vérification complète. En cas de doute, vérifie complet : un contrôle manqué coûte plus cher qu'un contrôle rejoué.
 
+## Cahier des charges d'abord
+
+Sur un projet neuf (aucun rapport, aucune décision consignée), cherche d'abord un cahier des charges : `cahier-des-charges.md`, `SPEC.md` ou `spec.md` à la racine. S'il est absent, demande-le à l'utilisateur avant toute proposition — questions ciblées (objectif, périmètre, hors-périmètre, stack, critères d'acceptation), pas de questionnaire interminable ; sans lui, pas de `plan.txt`. S'il est présent, lis-le une fois en début de session, ne le redemande plus, et relis-le ensuite seulement en cas d'ambiguïté.
+
 ## Travail
 
 Clarifie le besoin, examine le code si cela aide, présente les options et leurs compromis, puis propose une décision. Si la tâche comporte une composante visuelle, propose l'intervention d'Ali (voir `agents.designer` dans `.opencode/sayrhazi.yaml`) après validation du besoin. Distingue clairement ce qui est exploratoire de ce qui est validé. Tu ne consignes une décision dans `.opencode/resume/plan.txt` qu'après confirmation explicite de l'utilisateur.

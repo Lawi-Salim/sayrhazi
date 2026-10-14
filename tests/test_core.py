@@ -92,6 +92,14 @@ class TestRenderer(unittest.TestCase):
             rendu = (ROOT / "runtimes" / "opencode" / "agents" / (name + ".md")).read_text(encoding="utf-8")
             self.assertIn("## Lecture frugale", rendu, name)
 
+    def test_cahier_des_charges_d_abord(self):
+        for base in ("core/agents/lawibrahim/instructions.md",
+                     "runtimes/opencode/agents/lawibrahim.md"):
+            text = (ROOT / base).read_text(encoding="utf-8")
+            self.assertIn("## Cahier des charges d'abord", text, base)
+            self.assertIn("cahier-des-charges.md", text, base)
+            self.assertIn("sans lui, pas de `plan.txt`", text, base)
+
 
 class TestReport(unittest.TestCase):
     def test_templates_valides(self):

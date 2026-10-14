@@ -2,11 +2,13 @@
 """CLI Sayrhazi — point d'entree multi-plateforme (stdlib uniquement).
 
 Usage :
-    python cli/main.py install [--project .]
+    python cli/main.py [--version] | [install] [--project .]
     python cli/main.py check [sayrhazi] [--project .]
     python cli/main.py update [--project .]
     python cli/main.py remove [--project .] [--yes]
     python cli/main.py info [--project .]
+
+Sans commande : installe dans --project (comme la fonction de profil).
 """
 from __future__ import annotations
 
@@ -34,9 +36,12 @@ def main() -> int:
     parser.add_argument("--yes", action="store_true", help="remove : supprimer vraiment (defaut : simulation)")
     args = parser.parse_args()
 
-    if args.version or not args.command:
+    if args.version:
         print(_version())
         return 0
+    bare = not args.command
+    if bare:
+        args.command = "install"
 
     here = Path(__file__).resolve().parent
     target = here / "commands" / (args.command + ".py")
@@ -47,7 +52,12 @@ def main() -> int:
         cmd += ["--project", args.project]
     if args.command == "remove" and args.yes:
         cmd += ["--yes"]
-    return subprocess.run(cmd).returncode
+    code = subprocess.run(cmd).returncode
+    if bare and code == 0:
+        check = [sys.executable, str(here / "commands" / "check.py"),
+                 "sayrhazi", "--project", args.project]
+        code = subprocess.run(check).returncode
+    return code
 
 
 if __name__ == "__main__":
