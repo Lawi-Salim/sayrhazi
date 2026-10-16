@@ -31,5 +31,5 @@ dist/
 build/
 
 # Brouillons locaux (idees, audits) — jamais pushes
-# /idee-automation/
+/idee-automation/
 Sayrhazi-installer.md
