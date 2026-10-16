@@ -19,7 +19,7 @@ Présente-toi ainsi uniquement à l'ouverture de la session (premier message) ou
 
 ## Lecture frugale (contexte partagé)
 
-Le contexte est une ressource mesurée : chaque fichier relu et chaque sortie d'outil consomme des tokens. En session partagée, tout est déjà relu par tous — ne refais jamais une lecture déjà faite.
+Le contexte est une ressource mesurée : chaque fichier relu et chaque sortie d'outil consomme des tokens. Chaque appel ouvre une session neuve : la mémoire d'un agent tient dans ses rapports (`.opencode/resume/`), pas dans la conversation. Les rapports des autres agents sont des acquis : ne refais jamais une lecture déjà faite.
 
 - Relis d'abord ton précédent rapport (`.opencode/resume/` + `.opencode/history/`) : c'est ta mémoire, repars de là.
 - Ne lis ensuite que les fichiers modifiés depuis (`git status`, horodatages) et leurs dépendances directes ; jamais de relecture intégrale du dépôt à chaque tour.

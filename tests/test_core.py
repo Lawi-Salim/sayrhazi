@@ -389,7 +389,7 @@ class TestWatcherEngine(unittest.TestCase):
         self.assertEqual(len(notes), 1)
 
     def test_bom_review_couverte(self):
-        # Scénario Sarhi : review.txt avec BOM plus récente que build.txt.
+        # Cas réel rencontré : review.txt avec BOM plus récente que build.txt.
         import tempfile
         from pathlib import Path as _Path
         w = self._watcher()
@@ -808,6 +808,9 @@ class TestState(unittest.TestCase):
 
 
 class TestSession(unittest.TestCase):
+    """Appels sans reprise de session : le watcher ne fait pas le travail
+    d'OpenCode. On verrouille les invariants qui remplacent l'ancien suivi."""
+
     @classmethod
     def _watcher(cls):
         import importlib.util
@@ -817,469 +820,377 @@ class TestSession(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
-    def test_parse_model_id(self):
-        w = self._watcher()
-        self.assertEqual(w.parse_model_id('{"id":"muse-spark-1.3","providerID":"opencode"}'),
-                         "muse-spark-1.3")
-        self.assertEqual(w.parse_model_id("opencode/gpt-x"), "opencode/gpt-x")
-        self.assertEqual(w.parse_model_id("{pas json"), "")
-        self.assertEqual(w.parse_model_id(None), "")
+    @classmethod
+    def _tui(cls, name="watch_tui"):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            name, str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-tui.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
 
-    def test_short_model(self):
+    def test_aucune_reprise_de_session(self):
+        # Plus de --session : chaque appel ouvre une session neuve et laisse
+        # OpenCode gerer contexte, cache et compaction.
         w = self._watcher()
-        self.assertEqual(w.short_model("opencode/muse-spark-1.3-contributor-free"),
-                         "muse-spark-1.3-contributor")
-        self.assertEqual(w.short_model("plain"), "plain")
-        self.assertEqual(w.short_model(""), "")
-
-    def test_context_limit(self):
-        w = self._watcher()
-        self.assertEqual(w.context_limit("muse-spark-1.3-contributor-free", 123), 1048576)
-        self.assertEqual(w.context_limit("inconnu", 123), 123)
-        self.assertEqual(w.context_limit("inconnu", 0), w.SESSION_DEFAULT_LIMIT)
-
-    def test_session_usage(self):
-        w = self._watcher()
-        row = {"tokens_input": 1000, "tokens_cache_read": 500000, "tokens_cache_write": 0,
-               "tokens_output": 500}
-        base = {"baseline_input": 0, "baseline_cache": 0, "baseline_cache_write": 0,
-                "baseline_output": 0}
-        # Les relectures de cache ne comptent pas : (1000 + 500) / 10000.
-        self.assertAlmostEqual(w.session_usage(row, base, 10000), 0.15)
-        grown = {"baseline_input": 1000, "baseline_cache": 0, "baseline_cache_write": 0,
-                 "baseline_output": 500}
-        self.assertEqual(w.session_usage(row, grown, 10000), 0.0)
-        self.assertEqual(w.session_usage({}, base, 10000), 0.0)
-        self.assertEqual(w.session_usage(row, base, 0), 0.0)
-
-    def test_should_rotate(self):
-        w = self._watcher()
-        self.assertTrue(w.should_rotate(0.95, 0.95, None, None))
-        self.assertTrue(w.should_rotate(0.99, 0.95, None, None))
-        self.assertFalse(w.should_rotate(0.42, 0.95, None, None))
-        self.assertTrue(w.should_rotate(0.1, 0.95, 123, None))
-        self.assertFalse(w.should_rotate(0.1, 0.95, 123, 123))
-
-    def test_short_session(self):
-        w = self._watcher()
-        self.assertEqual(w.short_session("ses_eda5d124effe8IJ2Bj3IWBAarY"), "eda5d124ef")
-        self.assertEqual(w.short_session(""), "?")
-
-    def test_style_plain_sans_couleur(self):
-        w = self._watcher()
-        import os
-        old = os.environ.get("NO_COLOR")
-        os.environ["NO_COLOR"] = "1"
-        try:
-            self.assertEqual(w.style_line("ERREUR sur hadji FEATURE-003 à 42 %"),
-                             "ERREUR sur hadji FEATURE-003 à 42 %")
-            self.assertEqual(w.strip_ansi("\x1b[31mERREUR\x1b[0m"), "ERREUR")
-        finally:
-            if old is None:
-                del os.environ["NO_COLOR"]
-            else:
-                os.environ["NO_COLOR"] = old
-
-    def test_agent_model(self):
-        w = self._watcher()
-        with tempfile.TemporaryDirectory() as tmp:
-            from pathlib import Path as _Path
-            agent = _Path(tmp) / ".opencode" / "agent"
-            agent.mkdir(parents=True)
-            (agent / "hadji.md").write_text("---\nmodel: opencode/muse-spark-1.3\n---\n", encoding="utf-8")
-            full, short = w.agent_model(_Path(tmp), "hadji")
-            self.assertEqual(full, "opencode/muse-spark-1.3")
-            self.assertEqual(short, "muse-spark-1.3")
-            self.assertEqual(w.agent_model(_Path(tmp), "absent"), ("", ""))
-
-    def test_read_session_config(self):
-        w = self._watcher()
-        with tempfile.TemporaryDirectory() as tmp:
-            from pathlib import Path as _Path
-            root = _Path(tmp)
-            self.assertEqual(w.read_session_config(root), (0.95, 1048576))
-            cfg = root / ".opencode"
-            cfg.mkdir()
-            (cfg / "sayrhazi.yaml").write_text("session:\n  max_usage: 0.9\n  default_limit: 500\n",
-                                               encoding="utf-8")
-            self.assertEqual(w.read_session_config(root), (0.9, 500))
-            (cfg / "sayrhazi.yaml").write_text("session:\n  max_usage: 7\n", encoding="utf-8")
-            self.assertEqual(w.read_session_config(root), (0.95, 1048576))
-
-    def test_session_state_roundtrip(self):
-        w = self._watcher()
-        with tempfile.TemporaryDirectory() as tmp:
-            from pathlib import Path as _Path
-            root = _Path(tmp)
-            (root / ".opencode" / "state").mkdir(parents=True)
-            self.assertEqual(w.get_session_state(root, "F-1", "hadji"), {})
-            session = {"id": "ses_abc", "baseline_input": 10, "baseline_cache": 20,
-                       "baseline_output": 30, "compacted_at": "", "model": "m"}
-            w.set_session_state(root, "F-1", "hadji", session)
-            self.assertEqual(w.get_session_state(root, "F-1", "hadji")["id"], "ses_abc")
-            self.assertEqual(w.get_session_state(root, "F-1", "zawadi"), {})
-            self.assertEqual(w.get_session_state(root, "AUTRE", "hadji"), {})
-            text = (root / ".opencode" / "state" / "workflow-state.yaml").read_text(encoding="utf-8")
-            self.assertIn("  session:", text)
-            self.assertIn("    hadji:", text)
-            w.clear_session_state(root, "F-1", "hadji")
-            self.assertEqual(w.get_session_state(root, "F-1", "hadji"), {})
-
-    def test_adopt_session_premier_gagne(self):
-        w = self._watcher()
-        with tempfile.TemporaryDirectory() as tmp:
-            from pathlib import Path as _Path
-            root = _Path(tmp)
-            (root / ".opencode" / "state").mkdir(parents=True)
-            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
-            row_a = {"id": "ses_a", "tokens_input": 1, "tokens_output": 2,
-                     "tokens_cache_read": 3, "tokens_cache_write": 0,
-                     "time_compacting": None, "model": "m"}
-            row_b = dict(row_a, id="ses_b")
-            self.assertTrue(w.adopt_session_if_absent(root, "F-1", "hadji", row_a))
-            self.assertFalse(w.adopt_session_if_absent(root, "F-1", "hadji", row_b))
-            self.assertEqual(w.get_session_state(root, "F-1", "hadji")["id"], "ses_a")
-            # Autre agent : adoption indépendante.
-            self.assertTrue(w.adopt_session_if_absent(root, "F-1", "zawadi", row_b))
-            self.assertEqual(w.get_session_state(root, "F-1", "zawadi")["id"], "ses_b")
-            self.assertFalse(w.adopt_session_if_absent(root, "AUTRE", "hadji", row_b))
-
-    def test_adopt_session_baselines_zero_puis_stats_reelles(self):
-        # Régression FEATURE-007 : baselines post-run => usage 0 affiché
-        # alors que le journal montrait les vrais tokens. Une session
-        # neuve part de 0, tout son contenu est neuf.
-        w = self._watcher()
-        with tempfile.TemporaryDirectory() as tmp:
-            from pathlib import Path as _Path
-            root = _Path(tmp)
-            (root / ".opencode" / "state").mkdir(parents=True)
-            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
-            row = {"id": "ses_n", "tokens_input": 40000, "tokens_output": 13983,
-                   "tokens_cache_read": 999, "tokens_cache_write": 0,
-                   "time_compacting": None, "model": "m", "cost": 0.0}
-            self.assertTrue(w.adopt_session_if_absent(root, "F-1", "hadji", row))
-            block = w.get_session_state(root, "F-1", "hadji")
-            self.assertEqual(int(block["baseline_input"]), 0)
-            self.assertEqual(int(block["baseline_output"]), 0)
-            self.assertEqual(int(block["baseline_cache_write"]), 0)
-            w.note_session_stats(root, "F-1", "hadji", row, block, 1048576)
-            shown = w.get_session_state(root, "F-1", "hadji")
-            self.assertEqual(int(shown["used_tokens"]), 53983)
-            self.assertGreater(float(shown["usage"]), 0.0)
-
-    def test_isolation_clause(self):
-        w = self._watcher()
-        for agent, own in (("builder", "build.txt"), ("reviewer", "review.txt"),
-                           ("security", "security.txt"), ("qa", "qa.txt"),
-                           ("designer", "design.txt")):
-            clause = w.isolation_clause(agent)
-            self.assertIn(own, clause)
-            for other in ("plan.txt", "design.txt", "build.txt", "review.txt",
-                          "security.txt", "qa.txt"):
-                if other != own:
-                    self.assertIn(other, clause)
-
-    def test_build_command(self):
-        w = self._watcher()
-        cmd = w.build_command("hadji", "fais X", "F-1", "ses_1", "opencode/m")
-        self.assertEqual(cmd[:4], ["opencode", "run", "--agent", "hadji"])
+        cmd = w.build_command("hadji", "prompt",
+                              "Sayrhazi F-1 hadji 20261015-120000-1a2b", "opencode/m")
+        self.assertNotIn("--session", cmd)
         self.assertIn("--title", cmd)
-        self.assertIn("Sayrhazi F-1 hadji", cmd)
-        self.assertIn("--model", cmd)
-        self.assertIn("opencode/m", cmd)
-        self.assertIn("--session", cmd)
-        self.assertIn("ses_1", cmd)
-        self.assertEqual(cmd[-1], "fais X")
-        nu = w.build_command("hadji", "fais X", "F-1", "", "")
-        self.assertNotIn("--model", nu)
-        self.assertNotIn("--session", nu)
+        self.assertEqual(cmd[:4], ["opencode", "run", "--agent", "hadji"])
+        self.assertEqual(cmd[-1], "prompt")
 
-    def test_changement_tache_reinitialise_sessions(self):
+    def test_run_id_unique_et_triable(self):
+        w = self._watcher()
+        premier = w.build_run_id(1792000000.0)
+        second = w.build_run_id(1792000060.0)
+        self.assertLess(premier, second)
+        self.assertTrue(w.RUN_ID_RE.match(premier), premier)
+        self.assertTrue(w.RUN_ID_RE.match(second), second)
+        self.assertNotEqual(premier, second)
+
+    def test_titre_session_stable(self):
+        w = self._watcher()
+        titre = w.session_title("FEATURE-007", "hadji", "20261015-120000-1a2b")
+        self.assertEqual(titre, "Sayrhazi FEATURE-007 hadji 20261015-120000-1a2b")
+        self.assertTrue(titre.startswith("Sayrhazi FEATURE-007 hadji "))
+
+    def test_etat_sans_bloc_session(self):
+        import tempfile
+        from pathlib import Path as _Path
         w = self._watcher()
         with tempfile.TemporaryDirectory() as tmp:
-            from pathlib import Path as _Path
             root = _Path(tmp)
             (root / ".opencode" / "state").mkdir(parents=True)
             w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
-            w.set_session_state(root, "F-1", "hadji", {"id": "ses_x", "model": "m"})
-            self.assertEqual(w.get_session_state(root, "F-1", "hadji")["id"], "ses_x")
-            w.state_agents_add(root, "F-2", "hadji")
-            self.assertEqual(w.get_session_state(root, "F-2", "hadji"), {})
-            self.assertEqual(w.read_state_minimal(root).get("task_id"), "F-2")
+            texte = (root / ".opencode" / "state" / "workflow-state.yaml").read_text(encoding="utf-8")
+            self.assertNotIn("session:", texte)
+            self.assertEqual(w.read_state_minimal(root)["task_id"], "F-1")
 
-    def test_output_verified(self):
-        w = self._watcher()
+    def test_dashboard_formule_native(self):
+        # Reproduit le panneau Context d'OpenCode : cache.read compte.
+        t = self._tui()
+        payload = {"role": "assistant", "providerID": "opencode", "modelID": "muse",
+                   "tokens": {"input": 394, "output": 141, "reasoning": 50,
+                              "cache": {"read": 47217, "write": 0}}}
+        self.assertEqual(t.message_context_tokens(payload), 47802)
+        self.assertEqual(t.message_model_key(payload), "opencode/muse")
+
+    def test_dashboard_registre_modeles(self):
+        t = self._tui()
+        limites = t.load_model_limits(ROOT)
+        self.assertTrue(limites, "registre core/runtime/models.yaml vide ou introuvable")
+        attendus = {
+            "opencode/longcat-2.5-preview-free": 1000000,
+            "opencode/muse-spark-1.3-contributor-free": 1048576,
+            "opencode/nemotron-3-ultra-free": 1000000,
+            "opencode/nemotron-3.5-super-vl-free": 1048576,
+            "opencode/space-bunny-free": 1048576,
+            "opencode/step-5-preview-free": 1000000,
+        }
+        for cle, valeur in attendus.items():
+            self.assertEqual(limites.get(cle), valeur, cle)
+        # Modele absent du registre : pas de limite inventee.
+        self.assertIsNone(limites.get("inconnu/inexistant"))
+
+    def test_dashboard_aucun_repli_silencieux(self):
+        # Base absente : aucune session, ni auto ni manuelle.
+        t = self._tui()
+        inexistant = "chemin/inexistant.db"
+        self.assertEqual(t.find_sessions(inexistant, "/tmp", "hadji",
+                                         "Sayrhazi F-1 hadji "), [])
+
+    def test_dashboard_voit_les_agents_manuels(self):
+        # Un agent appelle a la main (titre libre) doit apparaitre aussi :
+        # seuls les appels du watcher portent le prefixe Sayrhazi.
+        t = self._tui()
+        db, path = self._db()
+        self._session(db, "ses_manual", "Ali : maquette du tableau", "ali",
+                      "/proj", 1000)
+        self._session(db, "ses_auto", "Sayrhazi F-1 ali 20261015-120000-1a2b",
+                      "ali", "/proj", 2000)
+        db.commit()
+        db.close()
+        trouvees = t.find_sessions(str(path), "/proj", "ali",
+                                   "Sayrhazi F-1 ali ")
+        self.assertEqual(len(trouvees), 2, "session manuelle ignoree")
+        auto = t.latest_auto_session(trouvees)
+        manuel = t.latest_manual_session(trouvees)
+        self.assertEqual(auto["id"], "ses_auto")
+        self.assertEqual(manuel["id"], "ses_manual")
+        # La plus active des deux est celle affichee.
+        courante = max((auto, manuel),
+                        key=lambda s: s.get("time_updated") or s["time_created"])
+        self.assertEqual(courante["id"], "ses_auto")
+
+    def test_dashboard_session_par_activite_pas_par_creation(self):
+        # Regression : comparer sur time_created affichait la mauvaise session.
+        # Une session manuelle creee avant une session automatique peut rester
+        # celle que l'utilisateur regarde (terminus ouvert) ; c'est la derniere
+        # ACTIVITE qui fait foi, pas la date de creation.
+        t = self._tui()
+        db, path = self._db()
+        self._session(db, "ses_manuelle", "Ali : travail en cours", "ali",
+                      "/proj", 1000, updated=9000)
+        self._session(db, "ses_auto", "Sayrhazi F-1 ali run-1", "ali",
+                      "/proj", 2000, updated=3000)
+        db.commit()
+        db.close()
+        trouvees = t.find_sessions(str(path), "/proj", "ali", "Sayrhazi F-1 ali ")
+        courante = max((s for s in trouvees), key=lambda s: s["time_updated"])
+        self.assertEqual(courante["id"], "ses_manuelle",
+                         "session la plus active selectionnee par time_updated")
+
+    def test_dashboard_barre_sans_limite(self):
+        t = self._tui()
+        self.assertEqual(set(t.bar(None)), {"·"})
+        self.assertTrue(t.bar(0.5).startswith("█"))
+
+    def test_dashboard_une_valeur_par_colonne(self):
+        # Regression : la jauge et le nombre de tokens etaient concatenes
+        # dans une seule colonne, si bien que l'en-tete compte une case de
+        # moins que la ligne et que tout le tableau se decale.
+        t = self._tui()
+
+        class _R:
+            agent_file, role = "hadji", "reviewer"
+            usage, context_tokens, usage_pct = 0.04, 45215, "4 %"
+            calls, manual_calls, cost, sid = 1, 4, "$0.00", "ebe4cb9c9f"
+            origine, report_txt, etat = "auto", "VALIDÉ", "VALIDÉ"
+
+        cellules = t.row_cells(_R())
+        self.assertEqual(len(cellules), len(t.COLUMNS),
+                         f"{len(cellules)} cellules pour {len(t.COLUMNS)} colonnes")
+        # La jauge seule dans sa colonne, les tokens seuls dans la leur.
+        self.assertEqual(len(cellules[2]), 10)
+        self.assertTrue(set(cellules[2]) <= {"█", "░", "·"})
+        self.assertEqual(cellules[3], "45 215")
+
+
+# --- Tests de robustesse 0.13.0 (sessions jetables, rapport = mémoire) ---
+
+    def _db(self):
+        """Base SQLite temporaire au schéma OpenCode (session + message)."""
+        import sqlite3
+        import tempfile
+        from pathlib import Path as _Path
+        path = _Path(tempfile.mkdtemp()) / "opencode.db"
+        self.addCleanup(__import__("shutil").rmtree, path.parent, True)
+        db = sqlite3.connect(str(path))
+        db.execute("CREATE TABLE session (id TEXT, title TEXT, agent TEXT,"
+                   " directory TEXT, cost REAL, time_created INTEGER,"
+                   " time_updated INTEGER)")
+        db.execute("CREATE TABLE message (id TEXT, session_id TEXT,"
+                   " time_created INTEGER, data TEXT)")
+        db.commit()
+        return db, path
+
+    def _session(self, db, sid, title, agent, directory, created, cost=0.0,
+                 updated=None):
+        db.execute("INSERT INTO session VALUES (?,?,?,?,?,?,?)",
+                   (sid, title, agent, directory, cost, created,
+                    created if updated is None else updated))
+
+    def _message(self, db, sid, created, payload):
+        import json
+        db.execute("INSERT INTO message VALUES (?,?,?,?)",
+                   (f"msg{sid}{created}", sid, created, json.dumps(payload)))
+
+    def test_deux_appels_simultanes_meme_agent(self):
+        # Deux appels du meme agent dans la meme seconde : titres distincts,
+        # sessions distinctes, aucune confusion d'identite.
+        import importlib.util
+        import threading
+        spec = importlib.util.spec_from_file_location(
+            "watch_work_c", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        w = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(w)
+        ids = []
+        lock = threading.Lock()
+
+        def worker():
+            for _ in range(60):
+                run_id = w.build_run_id(1792000000.0)   # meme seconde
+                titre = w.session_title("F-1", "hadji", run_id)
+                with lock:
+                    ids.append(titre)
+
+        threads = [threading.Thread(target=worker) for _ in range(6)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(len(ids), 360)
+        self.assertEqual(len(set(ids)), 360, "titres identiques : collision de run_id")
+
+    def test_base_inaccessible_etat_explicite(self):
+        # Base absente / illisible : aucune session etrangere selectionnee.
+        t = self._tui()
+        vide = t.find_sessions("absent.db", "/projet", "hadji", "Sayrhazi F-1 hadji ")
+        self.assertEqual(vide, [])
+        self.assertIsNone(t.last_assistant_message("absent.db", "ses_xyz"))
+
+    def test_message_sans_mesure_ne_remet_pas_le_contexte_a_zero(self):
+        # Deux formes relevees dans la base d'OpenCode pour un message qui ne
+        # mesure rien : le message ouvert au debut d'un run (finish absent) et
+        # un tour interrompu (finish "unknown", chaine non vide donc truthy).
+        # Aucune des deux ne doit faire retomber la jauge a 0.
+        t = self._tui()
+        for finish in (None, "unknown"):
+            with self.subTest(finish=finish):
+                db, path = self._db()
+                self._session(db, "ses_x", "Sayrhazi F-1 hadji run-1",
+                              "hadji", "/proj", 1000)
+                termine = {"role": "assistant", "finish": "stop", "providerID": "p",
+                           "modelID": "m", "tokens": {"input": 10, "output": 5,
+                                                      "reasoning": 0,
+                                                      "cache": {"read": 47217, "write": 0}}}
+                vide = {"role": "assistant", "finish": finish, "providerID": "p",
+                        "modelID": "m", "tokens": {"input": 0, "output": 0,
+                                                   "reasoning": 0,
+                                                   "cache": {"read": 0, "write": 0}}}
+                self._message(db, "ses_x", 2000, termine)
+                self._message(db, "ses_x", 3000, vide)
+                db.commit()
+                db.close()
+                payload = t.last_assistant_message(str(path), "ses_x")
+                self.assertEqual(t.message_context_tokens(payload), 47232,
+                                 "contexte remis a zero par un message sans mesure")
+
+    def test_compaction_non_concernee_par_le_contexte(self):
+        # OpenCode marque une compaction par un part `compaction` attache a un
+        # message USER, jamais a un message assistant. Le dashboard ne doit
+        # donc rien changer : il se contente de lire la baisse de contexte du
+        # message assistant suivant.
+        t = self._tui()
+        db, path = self._db()
+        self._session(db, "ses_c", "Travail a faire", "build", "/proj", 1000)
+        avant = {"role": "assistant", "finish": "stop", "providerID": "p",
+                 "modelID": "m", "tokens": {"input": 505540, "output": 100,
+                                            "reasoning": 0,
+                                            "cache": {"read": 0, "write": 0}}}
+        apres = {"role": "assistant", "finish": "stop", "providerID": "p",
+                 "modelID": "m", "tokens": {"input": 16176, "output": 50,
+                                            "reasoning": 0,
+                                            "cache": {"read": 0, "write": 0}}}
+        self._message(db, "ses_c", 2000, avant)
+        self._message(db, "ses_c", 3000, {"role": "user", "parts": [
+            {"type": "compaction", "auto": True, "overflow": True}]})
+        self._message(db, "ses_c", 4000, apres)
+        db.commit()
+        db.close()
+        payload = t.last_assistant_message(str(path), "ses_c")
+        # Apres compaction, la jauge suit la nouvelle valeur : pas de gel sur
+        # l'ancienne, pas de retour a zero.
+        self.assertEqual(t.message_context_tokens(payload), 16226)
+
+    def test_message_sans_mesure_utilise_si_aucune_autre_mesure(self):
+        # Aucune session n'a encore de tour mesurant : le message restant,
+        # meme partiel, reste affiche plutot qu'une ligne vide.
+        t = self._tui()
+        db, path = self._db()
+        self._session(db, "ses_y", "Sayrhazi F-1 ali run-1", "ali", "/proj", 1000)
+        partiel = {"role": "assistant", "finish": "tool-calls", "providerID": "p",
+                   "modelID": "m", "tokens": {"input": 0, "output": 7,
+                                              "reasoning": 0,
+                                              "cache": {"read": 0, "write": 0}}}
+        self._message(db, "ses_y", 2000, partiel)
+        db.commit()
+        db.close()
+        payload = t.last_assistant_message(str(path), "ses_y")
+        self.assertEqual(t.message_context_tokens(payload), 7)
+
+    def test_session_sans_mesure_aucune_il_existe(self):
+        # Seuls des messages a zero : aucune mesure. On ne fabrique rien.
+        t = self._tui()
+        db, path = self._db()
+        self._session(db, "ses_z", "Sayrhazi F-1 zawadi run-1", "zawadi",
+                      "/proj", 1000)
+        self._message(db, "ses_z", 2000, {"role": "assistant", "finish": "unknown",
+                                          "tokens": {"input": 0, "output": 0,
+                                                     "reasoning": 0,
+                                                     "cache": {"read": 0, "write": 0}}})
+        db.commit()
+        db.close()
+        self.assertIsNone(t.last_assistant_message(str(path), "ses_z"))
+
+    def test_modele_absent_registre_pas_de_pourcentage(self):
+        # Modele inconnu : n/d. Pas de pourcentage invente, tokens presents.
+        t = self._tui()
+        limites = {}
+        payload = {"role": "assistant", "providerID": "x", "modelID": "inconnu",
+                   "tokens": {"input": 10, "output": 5, "reasoning": 0,
+                              "cache": {"read": 0, "write": 0}}}
+        contexte = t.message_context_tokens(payload)
+        self.assertEqual(contexte, 15)
+        self.assertNotIn("x/inconnu", limites)      # inconnu -> pas de limite
+        self.assertIsNone(limites.get("x/inconnu"))  # pas de repli par defaut
+
+    def test_cache_dominant_conforme_panneau_opencode(self):
+        # Cache.read enorme : il compte dans le contexte (c'etait le bug du
+        # seuil 0.12.x, qui l'excluait).
+        t = self._tui()
+        payload = {"role": "assistant", "providerID": "opencode", "modelID": "m",
+                   "tokens": {"input": 394, "output": 141, "reasoning": 50,
+                              "cache": {"read": 47217, "write": 0}}}
+        contexte = t.message_context_tokens(payload)
+        self.assertEqual(contexte, 47802)
+        limite = 1048576
+        attendu = round(contexte / limite * 100)
+        self.assertEqual(attendu, 5)   # 4.56 % arrondi
+
+    def test_mise_a_jour_ancienne_installation_avec_session(self):
+        # Une config ancienne (bloc session:) reste valide et inerte.
+        import sys as _sys
+        import json as _json
+        _sys.path.insert(0, str(ROOT / "engine"))
+        import sayrhazi_config as sc
+        schema = _json.loads(
+            (ROOT / "core" / "schemas" / "config.schema.json").read_text(encoding="utf-8"))
+        base = sc.parse_simple_yaml(
+            (ROOT / "runtimes" / "opencode" / "templates" / "sayrhazi.yaml")
+            .read_text(encoding="utf-8"))[0]
+        base = dict(base)
+        base["session"] = {"max_usage": 0.95, "default_limit": 1048576}
+        problemes = sc.validate_against_schema(base, schema)
+        # Seul le A_COMPLETER attendu du template reste.
+        self.assertTrue(all("session" not in p for p in problemes), problemes)
+
+    def test_reprise_apres_arret_brutal_via_rapports(self):
+        # Regression centrale : la session est jetable, le travail ne l'est pas.
+        # Apres un arret brutal, le watcher repart des RAPPORTS, jamais d'une
+        # session precedente : un rapport produit suffit a finir la transition.
+        import importlib.util
+        import tempfile
+        from pathlib import Path as _Path
+        spec = importlib.util.spec_from_file_location(
+            "watch_work_r", str(ROOT / "runtimes" / "opencode" / "scripts" / "watch-work.py"))
+        w = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(w)
         with tempfile.TemporaryDirectory() as tmp:
-            from pathlib import Path as _Path
-            resume = _Path(tmp) / ".opencode" / "resume"
+            root = _Path(tmp)
+            resume = root / ".opencode" / "resume"
             resume.mkdir(parents=True)
-            self.assertTrue(w.output_verified(_Path(tmp), "", "F-1"))
-            self.assertFalse(w.output_verified(_Path(tmp), "qa.txt", "F-1"))
-            (resume / "qa.txt").write_text("task_id: F-1\nagent: qa\n", encoding="utf-8")
-            self.assertTrue(w.output_verified(_Path(tmp), "qa.txt", "F-1"))
-            self.assertFalse(w.output_verified(_Path(tmp), "qa.txt", "F-2"))
-
-    def test_format_tokens(self):
-        w = self._watcher()
-        self.assertEqual(w.format_tokens(12029), "12 029")
-        self.assertEqual(w.format_tokens(0), "0")
-        self.assertEqual(w.format_tokens(-5), "0")
-        self.assertEqual(w.format_tokens(None), "0")
-        self.assertEqual(w.format_cost(0.0), "$0.00")
-        self.assertEqual(w.format_cost(2.5), "$2.50")
-        self.assertEqual(w.format_cost(None), "$0.00")
-
-    def test_session_line_avec_tokens(self):
-        w = self._watcher()
-        row = {"id": "ses_aaa111", "tokens_input": 13029, "tokens_output": 0,
-               "tokens_cache_read": 0, "tokens_cache_write": 0, "cost": 1.5}
-        line = w.session_line(row, {}, 1000000)
-        self.assertIn("usage 1 %", line)
-        self.assertIn("13 029 tokens", line)
-        self.assertIn("$1.50", line)
-
-    def test_log_startup_session_sans_etat(self):
-        w = self._watcher()
-        with tempfile.TemporaryDirectory() as tmp:
-            from pathlib import Path as _Path
-            import io
-            import sys
-            buf = io.StringIO()
-            old = sys.stdout
-            sys.stdout = buf
-            try:
-                w.log_startup_session(_Path(tmp))
-            finally:
-                sys.stdout = old
-            self.assertIn("session : aucune", buf.getvalue())
-
-    def test_observe_session_relit_etat_frais(self):
-        w = self._watcher()
-        import sqlite3
-        import tempfile
-        from pathlib import Path as _Path
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _Path(tmp)
-            (root / ".opencode" / "state").mkdir(parents=True)
-            (root / ".opencode" / "history").mkdir(parents=True)
-            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
-            adopted = {"id": "ses_aaa111", "baseline_input": 100, "baseline_cache": 0,
-                       "baseline_cache_write": 0, "baseline_output": 50,
-                       "compacted_at": "", "model": "m"}
-            w.set_session_state(root, "F-1", "hadji", adopted)
-            db = _Path(tmp) / "opencode.db"
-            conn = sqlite3.connect(str(db))
-            conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
-                         " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
-                         " time_created INT, time_compacting INT, directory TEXT, title TEXT, cost REAL)")
-            conn.execute("INSERT INTO session VALUES ('ses_aaa111', 200, 100, 999999, 0, 'm', 10, NULL, 'C:/P', NULL, 0.0)")
-            conn.execute("INSERT INTO session VALUES ('ses_bbb222', 5, 5, 5, 0, 'm', 9999, NULL, 'C:/P', NULL, 0.0)")
-            conn.commit()
-            conn.close()
-            real_db = w.opencode_db_path
-            w.opencode_db_path = lambda: db
-            try:
-                # Snapshot de déclenchement vide + autre session plus récente :
-                # l'observation doit suivre la session adoptée (ses_aaa111), pas ses_bbb222.
-                w._observe_session(root, "F-1", "hadji", "", {}, 0.95, 1048576, 0)
-            finally:
-                w.opencode_db_path = real_db
-            log = (root / ".opencode" / "history" / "workflow-log.md").read_text(encoding="utf-8")
-            self.assertIn(w.short_session("ses_aaa111"), log)
-            self.assertNotIn(w.short_session("ses_bbb222"), log)
-            self.assertEqual(w.get_session_state(root, "F-1", "hadji")["id"], "ses_aaa111")
-
-    def test_maybe_rotate_before_run(self):
-        w = self._watcher()
-        import sqlite3
-        import tempfile
-        from pathlib import Path as _Path
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _Path(tmp)
-            (root / ".opencode" / "state").mkdir(parents=True)
-            (root / ".opencode" / "history").mkdir(parents=True)
-            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
-            adopted = {"id": "ses_rrr111", "baseline_input": 0, "baseline_cache": 0,
-                       "baseline_cache_write": 0, "baseline_output": 0,
-                       "compacted_at": "", "model": "m"}
-            w.set_session_state(root, "F-1", "hadji", adopted)
-            db = _Path(tmp) / "opencode.db"
-            conn = sqlite3.connect(str(db))
-            conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
-                         " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
-                         " time_created INT, time_compacting INT, directory TEXT, title TEXT, cost REAL)")
-            conn.execute("INSERT INTO session VALUES ('ses_rrr111', 960, 0, 0, 0, 'm', 10, NULL, 'C:/P', NULL, 0.0)")
-            conn.commit()
-            conn.close()
-            real_db = w.opencode_db_path
-            w.opencode_db_path = lambda: db
-            try:
-                # 96 % >= 95 % : rotation préventive, état nettoyé.
-                self.assertEqual(w.maybe_rotate_before_run(root, "F-1", adopted, "hadji", 0.95, 1000), "")
-                self.assertEqual(w.get_session_state(root, "F-1", "hadji"), {})
-                # Sous le seuil : on garde.
-                w.set_session_state(root, "F-1", "hadji", adopted)
-                self.assertEqual(w.maybe_rotate_before_run(root, "F-1", adopted, "hadji", 0.99, 100000),
-                                 "ses_rrr111")
-                # Sans session : rien à faire.
-                self.assertEqual(w.maybe_rotate_before_run(root, "F-1", {}, "hadji", 0.95, 1000), "")
-            finally:
-                w.opencode_db_path = real_db
-
-    def test_note_session_stats(self):
-        w = self._watcher()
-        import sqlite3
-        import tempfile
-        from pathlib import Path as _Path
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _Path(tmp)
-            (root / ".opencode" / "state").mkdir(parents=True)
-            (root / ".opencode" / "history").mkdir(parents=True)
-            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
-            adopted = {"id": "ses_s1", "baseline_input": 100, "baseline_cache": 0,
-                       "baseline_cache_write": 0, "baseline_output": 50,
-                       "compacted_at": "", "model": "m"}
-            w.set_session_state(root, "F-1", "hadji", adopted)
-            db = _Path(tmp) / "opencode.db"
-            conn = sqlite3.connect(str(db))
-            conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
-                         " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
-                         " time_created INT, time_compacting INT, directory TEXT, title TEXT, cost REAL)")
-            conn.execute("INSERT INTO session VALUES ('ses_s1', 1100, 550, 0, 0, 'm', 10, NULL,"
-                         " 'C:/P', 'Sayrhazi F-1 hadji', 0.0)")
-            conn.commit()
-            conn.close()
-            real_db = w.opencode_db_path
-            w.opencode_db_path = lambda: db
-            try:
-                w._observe_session(root, "F-1", "hadji", "ses_s1", adopted, 0.95, 10000, 0)
-            finally:
-                w.opencode_db_path = real_db
-            block = w.get_session_state(root, "F-1", "hadji")
-            self.assertEqual(int(block["used_tokens"]), 1500)
-            self.assertAlmostEqual(float(block["usage"]), 0.15)
-            self.assertIn("observed_at", block)
-            text = (root / ".opencode" / "state" / "workflow-state.yaml").read_text(encoding="utf-8")
-            self.assertIn("used_tokens:", text)
-
-    def test_clean_stop_roundtrip(self):
-        w = self._watcher()
-        import tempfile
-        from pathlib import Path as _Path
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _Path(tmp)
-            self.assertIsNone(w.read_clean_stop(root))
-            w.write_clean_stop(root)
-            stamp = w.read_clean_stop(root)
-            self.assertTrue(stamp and "T" in stamp)
-            w.clear_clean_stop(root)
-            self.assertIsNone(w.read_clean_stop(root))
-
-    def test_diagnose_restart_interruption(self):
-        w = self._watcher()
-        import io
-        import sys
-        import tempfile
-        from pathlib import Path as _Path
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _Path(tmp)
-            (root / ".opencode" / "state").mkdir(parents=True)
-            (root / ".opencode" / "history").mkdir(parents=True)
-            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS",
-                                         "running_agents": ["hadji"]})
-            (root / ".opencode" / "history" / "workflow-log.md").write_text(
-                "- [2026-10-11 00:00:01] build.txt TERMINÉ (F-1) -> appel de hadji\n",
+            (resume / "build.txt").write_text(
+                "task_id: F-1\nagent: builder\nstatus: TERMINÉ\n"
+                'completed_at: "2026-10-15T10:00:00+04:00"\nsummary: Fait.\n',
                 encoding="utf-8")
-            buf = io.StringIO()
-            old = sys.stdout
-            sys.stdout = buf
-            try:
-                w.diagnose_restart(root)
-            finally:
-                sys.stdout = old
-            out = buf.getvalue()
-            self.assertIn("interruption", out)
-            self.assertIn("hadji", out)
-            self.assertIn("pas de marqueur", out)
-            running = w.read_state_minimal(root).get("running_agents")
-            self.assertEqual(w._flow_items(running or "[]"), [])
+            # Aucun rapport de review : l'etape est rejouable depuis le rapport.
+            config = {"stages": [{"id": "review", "agent": "reviewer", "auto": True,
+                                  "trigger": {"report": "build.txt", "status": "TERMINÉ"}}]}
+            task, statut, mtime = w.parse_report_file(resume / "build.txt")
+            triggers = {"build.txt": {"task_id": task, "status": statut,
+                                      "mtime": mtime, "hash": "h"}}
+            eligible = w.eligible_transitions(config, triggers, {}, {})
+            self.assertEqual([s["id"] for s, _t, _w in eligible], ["review"])
+            # Le rapport d'entree suffit : aucune session n'est relue.
+            cmd = w.build_command("hadji", "p", w.session_title("F-1", "hadji",
+                                                                w.build_run_id()), "m")
+            self.assertNotIn("--session", cmd)
 
-    def test_diagnose_restart_propre(self):
-        w = self._watcher()
-        import io
-        import sys
-        import tempfile
-        from pathlib import Path as _Path
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _Path(tmp)
-            (root / ".opencode" / "state").mkdir(parents=True)
-            (root / ".opencode" / "history").mkdir(parents=True)
-            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
-            w.write_clean_stop(root)
-            buf = io.StringIO()
-            old = sys.stdout
-            sys.stdout = buf
-            try:
-                w.diagnose_restart(root)
-            finally:
-                sys.stdout = old
-            out = buf.getvalue()
-            self.assertIn("arrêt propre", out)
-            self.assertIsNone(w.read_clean_stop(root))
 
-    def test_attribution_session_par_titre(self):
-        w = self._watcher()
-        import sqlite3
-        import tempfile
-        from pathlib import Path as _Path
-        with tempfile.TemporaryDirectory() as tmp:
-            root = _Path(tmp)
-            (root / ".opencode" / "state").mkdir(parents=True)
-            (root / ".opencode" / "history").mkdir(parents=True)
-            w.write_state_minimal(root, {"task_id": "F-1", "status": "IN_PROGRESS"})
-            db = _Path(tmp) / "opencode.db"
-            conn = sqlite3.connect(str(db))
-            conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
-                         " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
-                         " time_created INT, time_compacting INT, directory TEXT, title TEXT, cost REAL)")
-            # Deux sessions créées à la même seconde, titres distincts.
-            proot = str(root).replace("\\", "/")
-            conn.execute("INSERT INTO session VALUES ('ses_h1', 10, 5, 0, 0, 'm', 100, NULL,"
-                         " ?, 'Sayrhazi F-1 hadji', 0.0)", (proot,))
-            conn.execute("INSERT INTO session VALUES ('ses_z1', 10, 5, 0, 0, 'm', 100, NULL,"
-                         " ?, 'Sayrhazi F-1 zawadi', 2.5)", (proot,))
-            conn.commit()
-            conn.close()
-            real_db = w.opencode_db_path
-            w.opencode_db_path = lambda: db
-            try:
-                w._observe_session(root, "F-1", "hadji", "", {}, 0.95, 1048576, 0)
-                w._observe_session(root, "F-1", "zawadi", "", {}, 0.95, 1048576, 0)
-            finally:
-                w.opencode_db_path = real_db
-            self.assertEqual(w.get_session_state(root, "F-1", "hadji")["id"], "ses_h1")
-            self.assertEqual(w.get_session_state(root, "F-1", "zawadi")["id"], "ses_z1")
-
-    def test_query_session_sqlite(self):
-        w = self._watcher()
-        import sqlite3
-        import tempfile
-        from pathlib import Path as _Path
-        db = _Path(tempfile.mkdtemp()) / "opencode.db"
-        conn = sqlite3.connect(str(db))
-        conn.execute("CREATE TABLE session (id TEXT, tokens_input INT, tokens_output INT,"
-                     " tokens_cache_read INT, tokens_cache_write INT, model TEXT,"
-                     " time_created INT, time_compacting INT, directory TEXT, title TEXT, cost REAL)")
-        conn.execute("INSERT INTO session VALUES ('ses_x', 10, 20, 30, 0, 'm', 999, NULL, 'C:/P', 'Sayrhazi F-1 hadji', 1.5)")
-        conn.commit()
-        conn.close()
-        row = w.query_session(db, "C:\\P", 500)
-        self.assertEqual(row["id"], "ses_x")
-        self.assertIsNone(w.query_session(db, "C:\\P", 1000))
-        self.assertEqual(w.query_session(db, "C:\\P", 0, title="Sayrhazi F-1 hadji")["id"], "ses_x")
-        self.assertIsNone(w.query_session(db, "C:\\P", 0, title="Sayrhazi F-1 zawadi"))
-        self.assertIsNone(w.query_session(_Path(tempfile.mkdtemp()) / "absent.db", "C:/P", 0))
-
+if __name__ == "__main__":
+    unittest.main(verbosity=1)
 
 if __name__ == "__main__":
     unittest.main(verbosity=1)

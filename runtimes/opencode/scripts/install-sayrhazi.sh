@@ -47,6 +47,12 @@ if [[ -e "$ADAPTER_ROOT/scripts/watch-tui.py" ]]; then
   cp "$ADAPTER_ROOT/scripts/watch-tui.py" "$OPENCODE_DIR/watch-tui.py"
 fi
 
+# Registre des fenêtres de contexte (dashboard uniquement, surchargeable).
+# Jamais écrasé : un projet qui a sa propre table de modèles la garde.
+if [[ -e "$SOURCE_ROOT/core/runtime/models.yaml" && ! -e "$OPENCODE_DIR/models.yaml" ]]; then
+  cp "$SOURCE_ROOT/core/runtime/models.yaml" "$OPENCODE_DIR/models.yaml"
+fi
+
 # Le gestionnaire de services aussi (séparé du moteur d'agents).
 if [[ -e "$ADAPTER_ROOT/scripts/services.py" ]]; then
   cp "$ADAPTER_ROOT/scripts/services.py" "$OPENCODE_DIR/services.py"

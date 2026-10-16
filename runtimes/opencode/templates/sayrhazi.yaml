@@ -2,7 +2,7 @@
 # Ce fichier décrit le projet courant ; il ne lance aucun service.
 workflow:
   name: Sayrhazi # Ne pas modifier
-  version: "0.12.3" # Ne pas modifier
+  version: "0.13.0" # Ne pas modifier
 
 project:
   name: A_COMPLETER # Renseigner le nom du projet
@@ -44,13 +44,15 @@ quality:
   design_required: false
   required_checks: []
 
-session:
-  # Une seule session OpenCode par tâche, réutilisée à chaque appel.
-  # Bascule vers une session neuve quand l'usage atteint max_usage
-  # (0.95 = 95 %, marge pour écrire le rapport final).
-  max_usage: 0.95
-  # Fenêtre de contexte (tokens) si le modèle est inconnu.
-  default_limit: 1048576
+# Sessions OpenCode : une session neuve par appel, titre
+# `Sayrhazi <task_id> <agent> <run_id>`. Le watcher ne suit plus l'usage et
+# ne fixe aucun seuil — OpenCode gère contexte, cache et compaction.
+#
+# Le modèle de chaque agent se règle dans `.opencode/agent/<agent>.md`
+# (`model:`), ce qui permet d'affecter un modèle différent à chaque agent,
+# payant compris. Sa fenêtre de contexte se déclare dans `.opencode/models.yaml`
+# (relevé ponctuel : un modèle listé n'est pas forcément encore gratuit).
+# Rien à configurer ici.
 
 integration:
   docker_required: false

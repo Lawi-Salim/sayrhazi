@@ -28,7 +28,9 @@ Projet/
     ├── agent/          6 agents installés
     ├── sayrhazi.yaml   configuration locale
     ├── opencode.json   permissions locales
-    ├── watch-work.py   orchestrateur build.txt → Hadji
+    ├── watch-work.py   orchestrateur piloté par workflow.yaml
+    ├── watch-tui.py    dashboard temps réel (lecture seule)
+    ├── models.yaml     fenêtres de contexte connues (dashboard)
     ├── resume/
     ├── history/
     └── features/

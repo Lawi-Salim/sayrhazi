@@ -61,9 +61,7 @@ def default_state(task_id: str) -> dict:
                          "started_at": None,
                          "current_stages": [], "completed_stages": [],
                          "pending_stages": [], "blocked_stages": [],
-                         "running_agents": [],
-                         # Sessions OpenCode par agent (remplies par le watcher).
-                         "session": {}}}
+                         "running_agents": []}}
 
 
 def _scalar(value) -> str:
@@ -134,9 +132,9 @@ def validate_state(state: dict) -> list[str]:
                 "blocked_stages", "running_agents"):
         if not isinstance(wf.get(key), list):
             errors.append(f"workflow.{key} doit être une liste")
-    session = wf.get("session")
-    if session is not None and not isinstance(session, dict):
-        errors.append("workflow.session doit être un mapping")
+    # `session:` appartenait au suivi de sessions du watcher, supprimé en
+    # 0.13.0. Un état plus ancien peut encore le contenir : accepté, jamais
+    # exigé, jamais réécrit (les métriques d'appel sont lues chez OpenCode).
     return errors
 
 
