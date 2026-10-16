@@ -47,6 +47,13 @@ def install_project(project: Path, core: Path) -> None:
     if tui.is_file():
         shutil.copy2(tui, opencode / "watch-tui.py")
 
+    # Registre des fenetres de contexte (dashboard uniquement). Jamais ecrase :
+    # un projet peut declarer sa propre table de modeles, comme le fait deja
+    # l'updater et les deux installeurs shell/PowerShell.
+    models = core / "core" / "runtime" / "models.yaml"
+    if models.is_file() and not (opencode / "models.yaml").is_file():
+        shutil.copy2(models, opencode / "models.yaml")
+
     readme = project / "SAYRHAZI-README.md"
     if not readme.is_file():
         readme.write_text(
