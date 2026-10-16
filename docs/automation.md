@@ -104,17 +104,25 @@ Un agent manuel consomme autant de contexte qu'un appel automatique, il est donc
 
 La ligne affiche la session **la plus récemment active** de l'agent, quelle que soit son origine.
 
-« La plus récemment active » signifie la plus grande `session.time_updated`, **pas** la plus grande `time_created`. Une session manuelle longue peut avoir été ouverte bien avant une session automatique tout en restant celle que l'utilisateur regarde ; comparer les dates de création affichait alors la session automatique périmée et un contexte qui ne correspondait à aucun terminal ouvert. Deux compteurs restent affichés : appels du watcher / sessions manuelles.
+« La plus récemment active » signifie la plus grande `session.time_updated`, **pas** la plus grande `time_created`. Une session manuelle longue peut avoir été ouverte bien avant une session automatique tout en restant celle que l'utilisateur regarde ; comparer les dates de création affichait alors la session automatique périmée et un contexte qui ne correspondait à aucun terminal ouvert.
 
-Deux métriques distinctes, jamais mélangées :
+### Deux blocs, deux portées
+
+La ligne sépare visuellement deux groupes de colonnes, parce qu'ils ne mesurent pas la même chose. Les confondre laissait croire qu'un compteur d'historique décrivait la session affichée.
+
+**Bloc session** — `Session`, `Origine`, `Jauge`, `Tokens`, `%`, `Coût sess.`
+
+Décrivent **uniquement** la session affichée, celle dont l'ID est donné dans la ligne. Quand la vague suivante ouvre une session neuve, ces valeurs changent avec elle et suivent le nouvel ID. Elles ne sont jamais sommées d'une session à l'autre : additionner des fenêtres de contextes différents n'a pas de sens.
+
+**Bloc projet** — `Auto`, `Manuel`, `Coût proj.`
+
+Agrègent **toutes** les sessions de cet agent sur ce projet, toutes tâches confondues. `Auto = 2` signifie « deux appels du watcher depuis le début du projet », pas « deux appels dans la session affichée ». Pour une facture, l'addition a un sens ; pour un contexte, jamais.
 
 * **Contexte du dernier message** — reproduit la formule du panneau Context d'OpenCode : dernier message assistant **portant une mesure**, `input + output + reasoning + cache.read + cache.write`, divisé par la fenêtre de contexte du modèle. Ce pourcentage décrit ce message, pas le cumul de la session.
 
 Un message assistant dont le contexte vaut zéro n'est pas une mesure : le dashboard le saute. Deux formes existent dans la base d'OpenCode — le message ouvert au début d'un run (`finish` absent) et un tour interrompu (`finish: "unknown"`, chaîne non vide, qu'un simple test sur la présence de `finish` ne peut pas écarter). Le dashboard garde alors la dernière valeur réelle au lieu de retomber à zéro pendant l'exécution.
 
 La compaction d'OpenCode n'a pas de cas particulier : elle est marquée par un part `compaction` attaché à un message **user**, jamais à un message assistant. Le dashboard n'y voit qu'une baisse de contexte et affiche normalement la nouvelle valeur.
-
-* **Coût et nombre d'appels de la tâche** — somme sur toutes les sessions de la tâche.
 
 Aucun pourcentage cumulatif n'est affiché : additionner des fenêtres de sessions différentes n'a pas de sens.
 

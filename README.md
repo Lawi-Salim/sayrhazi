@@ -10,7 +10,7 @@
 ║    \___ \ / _` | | | | '__| '_ \ / _` |_  / | |   ║
 ║     ___) | (_| | |_| | |  | | | | (_| |/ /__| |   ║
 ║    |____/ \__,_|\__, |_|  |_| |_|\__,_/_____|_|   ║
-║                 |___/  v0.13.0 - sayrhazi         ║
+║                 |___/  v0.13.1 - sayrhazi         ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
 ```
@@ -157,6 +157,7 @@ Les crochets indiquent un argument optionnel : sans argument, la commande vise l
 | `tunda sayrhazi` | diagnostic | Checklist : structure, 6 agents, 0 `A_COMPLETER`, schéma, contrat des rapports + `workflow.yaml` (signalés, jamais bloquants), version vs noyau (exit 0/1/2) |
 | `update sayrhazi` | mise à jour | Agents + watcher, migration douce + backup, version alignée, check relancé |
 | `info sayrhazi` | renseigne | Banner + versions, agents, rapports (lecture seule) |
+| `sayrhazi-tui [chemin]` | dashboard | Lance `.opencode/watch-tui.py` sur le projet le plus proche (courant par défaut) ; `--once` pour une capture unique. Binaire npm sur le PATH, donc indépendant du profil de terminal |
 | `remove sayrhazi [--yes]` | retire prudemment | Simulation + confirmation ; fichiers noyau seuls, jamais config/rapports/historique |
 
 ## Zawadi et Playwright (optionnel)
