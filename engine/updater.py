@@ -158,6 +158,12 @@ def main() -> int:
     if tui.is_file():
         shutil.copy2(tui, opencode / "watch-tui.py")
         updated += 1
+    # Registre des fenêtres de contexte : créé seulement s'il est absent
+    # (un projet peut vouloir sa propre table de modèles).
+    models_registry = core / "core" / "runtime" / "models.yaml"
+    if models_registry.is_file() and not (opencode / "models.yaml").is_file():
+        shutil.copy2(models_registry, opencode / "models.yaml")
+        updated += 1
     services = core / "runtimes" / "opencode" / "scripts" / "services.py"
     if services.is_file():
         shutil.copy2(services, opencode / "services.py")

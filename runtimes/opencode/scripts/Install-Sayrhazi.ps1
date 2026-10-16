@@ -66,6 +66,14 @@ if (Test-Path -LiteralPath $tuiSource) {
     Copy-Item $tuiSource (Join-Path $opencode 'watch-tui.py') -Force
 }
 
+# Registre des fenêtres de contexte (dashboard uniquement, surchargeable).
+# Jamais écrasé : un projet qui a sa propre table de modèles la garde.
+$modelsSource = Join-Path $sourceRoot 'core/runtime/models.yaml'
+$modelsTarget = Join-Path $opencode 'models.yaml'
+if ((Test-Path -LiteralPath $modelsSource) -and -not (Test-Path -LiteralPath $modelsTarget)) {
+    Copy-Item $modelsSource $modelsTarget
+}
+
 # Le gestionnaire de services aussi (séparé du moteur d'agents).
 $servicesSource = Join-Path $adapterRoot 'scripts/services.py'
 if (Test-Path -LiteralPath $servicesSource) {

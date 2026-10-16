@@ -1,0 +1,54 @@
+# Registre des fenêtres de contexte (lecture seule, observé par le dashboard).
+#
+# Ceci est un relevé ponctuel, PAS un catalogue officiel. Les modèles listés
+# étaient accessibles via OpenCode au `verified_at` indiqué ; un fournisseur
+# peut les retirer, les mettre derrière une formule payante ou en changer la
+# fenêtre du jour au lendemain (constaté : des modèles apparaissent et
+# disparaissent d'une semaine à l'autre). Une ligne ici ne dit rien de la
+# disponibilité future d'un modèle, ni de son prix : ne jamais en déduire
+# qu'un modèle est gratuit parce qu'il figure dans ce fichier.
+#
+# Pourquoi ce fichier existe quand même : OpenCode n'enregistre nulle part la
+# fenêtre de contexte d'un modèle (ni en base, ni dans sa configuration), mais
+# son panneau Context en a besoin. Sayrhazi reproduit ce calcul ; sans limite
+# connue il n'affiche aucun pourcentage plutôt qu'un chiffre faux — les tokens
+# et le coût restent affichés.
+#
+# Clé = identifiant complet `provider/model` (jamais le seul nom : deux
+# fournisseurs peuvent proposer des variantes homonymes de limites
+# différentes).
+#
+# Entretien :
+#   * nouveau modèle (gratuit ou payant) -> ajouter son ID et son contexte ;
+#   * modèle payant -> l'ID se règle dans le frontmatter de la fiche de
+#     l'agent (`model:` dans `.opencode/agent/*.md`), ce qui permet d'affecter
+#     un modèle différent à chaque agent. Le watcher passe toujours ce modèle
+#     en `--model` : la fiche est la seule source de vérité.
+#   * fenêtre modifiée -> corriger la valeur et `verified_at` ;
+#   * modèle retiré -> la ligne peut rester (inertre) ou être supprimée.
+
+models:
+  opencode/longcat-2.5-preview-free:
+    context_tokens: 1000000
+    source: releve manuel via opencode
+    verified_at: "2026-10-15"
+  opencode/muse-spark-1.3-contributor-free:
+    context_tokens: 1048576
+    source: releve manuel via opencode
+    verified_at: "2026-10-15"
+  opencode/nemotron-3-ultra-free:
+    context_tokens: 1000000
+    source: releve manuel via opencode
+    verified_at: "2026-10-15"
+  opencode/nemotron-3.5-super-vl-free:
+    context_tokens: 1048576
+    source: releve manuel via opencode
+    verified_at: "2026-10-15"
+  opencode/space-bunny-free:
+    context_tokens: 1048576
+    source: releve manuel via opencode
+    verified_at: "2026-10-15"
+  opencode/step-5-preview-free:
+    context_tokens: 1000000
+    source: releve manuel via opencode
+    verified_at: "2026-10-15"

@@ -28,4 +28,5 @@ Avant un commit :
 
 ## Versionnement
 
-Les commits suivent les Conventional Commits : `type(portée): objet` en minuscules, sans version dans le message. Types : `feat`, `fix`, `docs`, `test`, `refactor`, `chore`. Portées : `core`, `engine`, `cli`, `runtimes`, `docs`, `tests`, `watcher`. Exemple : `feat(watcher): moteur générique piloté par workflow.yaml`. Les versions vivent uniquement dans `VERSION`, `CHANGELOG.md`, les tags Git (`v0.1.0`) et les releases GitHub.
+- Lis le fichier `engine/bump_version.py` à chaque fois qu'une nouvelle version sera écrite dans le fichier `CHANGELOG.md` pour mettre à jours tous les fichiers concernés pour afficher la version.
+- Les commits suivent les Conventional Commits : `type(portée): objet` en minuscules, sans version dans le message. Types : `feat`, `fix`, `docs`, `test`, `refactor`, `chore`. Portées : `core`, `engine`, `cli`, `runtimes`, `docs`, `tests`, `watcher`. Exemple : `feat(watcher): moteur générique piloté par workflow.yaml`. Les versions vivent uniquement dans `VERSION`, `CHANGELOG.md`, les tags Git (`v0.1.0`) et les releases GitHub.

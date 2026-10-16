@@ -44,6 +44,16 @@ Chaque agent lit d'abord la configuration et les règles du projet courant. Aucu
 
 Le contexte est une ressource mesurée : chaque fiche agent (`core/agents/*/instructions.md`, régénérées vers `runtimes/opencode/agents/` par `engine/renderer.py`) impose de relire d'abord son précédent rapport, de ne lire ensuite que les fichiers modifiés (`git status`, horodatages) et de traiter les rapports des autres agents comme des acquis (verdicts lus, vérifications non refaites). Vérifications lourdes réservées aux fichiers changés. L'effort est proportionné à l'ampleur du changement : contenu statique ou retouche ciblée → contrôles ciblés sans rejouer lint/build complets ; refonte, logique, formulaires, données ou sécurité → vérification complète ; doute → complet.
 
+## Modèle par agent
+
+Chaque agent déclare son modèle dans le frontmatter de sa fiche (`model:` dans `core/agents/<rôle>/instructions.md`, régénéré vers `runtimes/opencode/agents/*.md`). Le watcher passe toujours ce modèle en `--model` : la fiche est la seule source de vérité, un modèle se change en éditant la fiche, jamais un paramètre d'exécution ni l'état.
+
+Chaque agent peut donc porter un modèle différent — un modèle payant pour une étape où la qualité prime, un modèle gratuit pour les autres.
+
+Le modèle doit exister dans la base d'OpenCode. Sa fenêtre de contexte se déclare dans `core/runtime/models.yaml` (installé dans `.opencode/models.yaml`) : sans cette entrée, le dashboard affiche `n/d` sur le contexte du dernier message, tout en affichant tokens et coût.
+
+Ce registre est un **relevé ponctuel**, pas un catalogue officiel : les modèles listés étaient accessibles à la date indiquée (`verified_at`) et un fournisseur peut les retirer ou les rendre payants à tout moment (constaté : des modèles apparaissent et disparaissent d'une semaine à l'autre). Une présence dans ce fichier ne signifie donc **jamais** qu'un modèle est gratuit.
+
 ## Identité visuelle
 
 Chaque agent déclare sa couleur en frontmatter (`color`, hexadécimal `#RRGGBB` exigé par OpenCode) : Lawibrahim `#8B5CF6`, Ali `#3B82F6`, Bamse `#22C55E`, Hadji `#F59E0B`, Hifadhui `#EF4444`, Zawadi `#14B8A6`.

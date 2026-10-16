@@ -94,12 +94,12 @@
     },
     "session": {
       "type": "object",
-      "required": ["max_usage", "default_limit"],
+      "description": "Obsolete depuis 0.13.0 : le watcher ne suit plus l'usage des sessions (session neuve par appel, OpenCode gere le contexte). Accepte pour ne pas casser les configs existantes ; sans effet.",
       "properties": {
-        "max_usage": {"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1},
-        "default_limit": {"type": "integer", "minimum": 1}
+        "max_usage": {"type": "number"},
+        "default_limit": {"type": "integer"}
       },
-      "additionalProperties": false
+      "additionalProperties": true
     }
   },
   "additionalProperties": false

@@ -73,17 +73,58 @@ Les conditions se résolvent depuis `sayrhazi.yaml` (`visual_qa_required` → Za
 
 Les étapes éligibles ensemble partent en parallèle (Lot 6, threads stdlib), bornées par `workflow.max_parallel_agents` (défaut 3, garde-fou machine). La convergence est journalisée (`Convergence : review OK, security OK (2/2)`) : un échec (timeout, erreur) n'empêche jamais les autres branches, qui écrivent chacune leur rapport ; la branche échouée sera réévaluée au prochain changement. `running_agents` reflète l'ensemble en cours. Séquentiel si une seule étape éligible, repli historique sinon.
 
-## Sessions partagées et rotation
+## Sessions : une par appel, OpenCode responsable
 
-Le watcher réutilise une session OpenCode par (tâche, agent) (`opencode run --session`) au lieu d'en ouvrir une neuve à chaque appel : une session partagée entre agents différents casse l'identité des rôles (le flag `--agent` ne re-personnalise pas une session existante — constaté : un appel `zawadi` répondant en Hadji). Chaque appel titre sa session (`Sayrhazi <task> <agent>`) pour une attribution déterministe à l'adoption (la « dernière session du projet » ne suffit pas : en vague parallèle, toutes les branches y verraient la même). Le modèle passé à chaque appel (`--model`) est toujours celui du frontmatter de la fiche agent : source de vérité unique — changer de modèle (y compris vers un modèle payant) impose d'éditer la fiche de l'agent, jamais l'état (le `model:` de l'état n'est qu'un constat informatif). Le mapping `session:` est persisté dans `state/workflow-state.yaml` (un bloc par agent, réinitialisé au changement de tâche) ; la réconciliation le préserve.
+Le watcher n'ouvre **jamais** de session partagée. Chaque appel est un `opencode run` sans `--session` : une session neuve, que le watcher ne réutilise pas et ne réinjecte pas. Conséquence : OpenCode garde la main entière sur le contexte (cache, compaction, saturation), le watcher ne fait pas son travail.
 
-Après chaque appel, le watcher lit l'usage réel dans la base locale d'OpenCode (contenus nouveaux depuis l'adoption : `tokens_input + tokens_output + tokens_cache_write`, nets des compteurs à l'adoption — les relectures `tokens_cache_read` sont exclues car elles gonflent le cumulé sans occuper plus de contexte — rapportés à la fenêtre du modèle, 1 048 576 pour Muse Spark) et journalise `session <id> · usage NN % · NNN tokens · $X.XX` (tokens neufs depuis l'adoption, coût déclaré par le provider — $0.00 sur tier gratuit). Chaque observation persiste aussi un snapshot daté dans l'état (`usage`, `used_tokens`, `cost`, `observed_at` par agent) : la lecture directe du fichier donne la situation à date, sans relancer le watcher. Quand l'usage atteint `session.max_usage` (défaut `0.95`, configurable dans `sayrhazi.yaml`), ou si OpenCode a compacté entre-temps, la session pivote : le prochain appel repart sur une session neuve. La rotation est aussi préventive : si la session adoptée dépasse déjà le seuil au moment du déclenchement, on pivote AVANT l'appel (jamais de vague promise à la saturation — au-delà du seuil, le modèle boucle en répétitions). En vague parallèle, la première branche qui termine adopte la session, les autres suivent. Un id de session inconnu d'OpenCode provoque un seul nouvel essai sans session, jamais une boucle. Sans base locale lisible, l'usage est inconnu et il n'y a ni réutilisation ni rotation (comportement historique). En session partagée, chaque appel exige le cloisonnement d'écriture : l'agent ne produit QUE son rapport (lire les autres est utile, les écrire est interdit, archivage vers `history/` autorisé).
+Chaque appel titre sa session de façon déterministe et unique :
+
+```
+Sayrhazi <task_id> <agent> <run_id>     ex. Sayrhazi FEATURE-007 hadji 20261015-120000-1a2b
+```
+
+Le `run_id` (horodatage + suffixe) distingue deux appels successifs du même agent sur la même tâche. Le titre est la **seule** chose que le watcher produit pour l'observation ; il ne lit pas la base d'OpenCode, ne calcule aucun pourcentage, ne fixe aucun seuil, ne déclenche ni rotation ni compaction. Le modèle passé à chaque appel (`--model`) reste celui du frontmatter de la fiche agent : changer de modèle impose d'éditer la fiche, jamais un paramètre d'exécution.
+
+La mémoire d'un agent est dans ses rapports (`.opencode/resume/`, archivés dans `history/`), pas dans un historique de conversation réinjecté. Le cloisonnement d'écriture reste exigé à chaque appel : l'agent ne produit QUE son rapport (lire les autres est utile, les écrire est interdit, archivage vers `history/` autorisé).
+
+`state/workflow-state.yaml` ne contient plus de bloc `session:` : l'état ne décrit que la coordination (tâche, statut, étapes, agents en cours). Un état plus ancien peut encore contenir ce bloc ; il est accepté, jamais exigé, jamais réécrit.
+
+### Pourquoi ce changement
+
+Jusqu'à 0.12.x, le watcher réutilisait `--session` par (tâche, agent) et estimait la saturation avec `tokens_input + tokens_output + tokens_cache_write`, en **excluant `tokens_cache_read`**. Cette exclusion était fausse : la relecture de cache fait partie du contexte renvoyé à chaque appel et en représente souvent la majeure partie. La jauge tombait donc à ~0 % pendant que le panneau Context d'OpenCode affichait la valeur réelle. Retirer tout le mécanisme est plus sûr que de le corriger.
+
+## Dashboard (`watch-tui.py`)
+
+Le dashboard observe, il ne pilote rien. Pour chaque agent il liste **toutes** ses sessions sur le projet et distingue les deux origines :
+
+* **Auto** — le titre porte le préfixe `Sayrhazi <task_id> <agent> `, donc la session a été ouverte par le watcher ;
+* **Manu** — titre libre, session ouverte à la main depuis un terminal (Lawibrahim, Bamse désactivé, Ali, tout appel direct).
+
+Un agent manuel consomme autant de contexte qu'un appel automatique, il est donc affiché au même titre. Le filtre reste strict sur le projet et l'agent : jamais la session d'un autre agent ou d'un autre projet ; à défaut, `n/d`.
+
+La ligne affiche la session **la plus récemment active** de l'agent, quelle que soit son origine.
+
+« La plus récemment active » signifie la plus grande `session.time_updated`, **pas** la plus grande `time_created`. Une session manuelle longue peut avoir été ouverte bien avant une session automatique tout en restant celle que l'utilisateur regarde ; comparer les dates de création affichait alors la session automatique périmée et un contexte qui ne correspondait à aucun terminal ouvert. Deux compteurs restent affichés : appels du watcher / sessions manuelles.
+
+Deux métriques distinctes, jamais mélangées :
+
+* **Contexte du dernier message** — reproduit la formule du panneau Context d'OpenCode : dernier message assistant **portant une mesure**, `input + output + reasoning + cache.read + cache.write`, divisé par la fenêtre de contexte du modèle. Ce pourcentage décrit ce message, pas le cumul de la session.
+
+Un message assistant dont le contexte vaut zéro n'est pas une mesure : le dashboard le saute. Deux formes existent dans la base d'OpenCode — le message ouvert au début d'un run (`finish` absent) et un tour interrompu (`finish: "unknown"`, chaîne non vide, qu'un simple test sur la présence de `finish` ne peut pas écarter). Le dashboard garde alors la dernière valeur réelle au lieu de retomber à zéro pendant l'exécution.
+
+La compaction d'OpenCode n'a pas de cas particulier : elle est marquée par un part `compaction` attaché à un message **user**, jamais à un message assistant. Le dashboard n'y voit qu'une baisse de contexte et affiche normalement la nouvelle valeur.
+
+* **Coût et nombre d'appels de la tâche** — somme sur toutes les sessions de la tâche.
+
+Aucun pourcentage cumulatif n'est affiché : additionner des fenêtres de sessions différentes n'a pas de sens.
+
+OpenCode ne stocke nulle part la fenêtre de contexte d'un modèle (ni en base, ni dans sa configuration). Sayrhazi la lit dans `core/runtime/models.yaml`, installé dans `.opencode/models.yaml` et surchargeable par projet. Modèle absent du registre → `n/d` : mieux vaut une métrique absente qu'un pourcentage silencieusement faux ; tokens et coût restent affichés.
 
 En cas de timeout, le watcher vérifie si le rapport a quand même été produit (le processus peut rester bloqué après l'écriture, ex. serveur de prévisualisation laissé actif) : rapport présent → succès acté, sans retry. Les retries réseau/timeout sont à un seul coup (pas de réveil permanent) et la ligne `État :` ne s'affiche qu'en cas de changement — fini le spam toutes les 3 secondes.
 
 ## Reprise après interruption (`--continue`)
 
-Un Ctrl+C au repos écrit un marqueur d'arrêt propre (`.opencode/state/clean_stop`) ; un arrêt brutal (terminal fermé, processus tué) n'en laisse pas. Relancé avec `--continue`, le watcher diagnostique : marqueur présent/absent, agents retrouvés en cours dans l'état (purge), appels sans terminaison au journal, pause quota enregistrée, sessions reprises. Puis la boucle normale reprend le travail inachevé (rapports et point 7). Sans le flag, le démarrage reste silencieux comme avant.
+Un Ctrl+C au repos écrit un marqueur d'arrêt propre (`.opencode/state/clean_stop`) ; un arrêt brutal (terminal fermé, processus tué) n'en laisse pas. Relancé avec `--continue`, le watcher diagnostique : marqueur présent/absent, agents retrouvés en cours dans l'état (purge), appels sans terminaison au journal, pause quota enregistrée. Puis la boucle normale reprend le travail inachevé (rapports et point 7). Sans le flag, le démarrage reste silencieux comme avant.
 
 La console colore les mots importants (agents, `task_id`, pourcentages, `ERREUR`/`ATTENTION`) et affiche le modèle de chaque agent appelé (`[muse-spark-1.3]`, lu dans le frontmatter de `.opencode/agent/*.md`) ; le journal fichier reste en texte brut, avec le nom complet du modèle. Pour la lisibilité, chaque vague de déclenchements est encadrée (`########## vague : … ##########`) et la sortie de chaque agent est encadrée (`============ AGENT · … ============` … `============ FIN · … ============`).
 
