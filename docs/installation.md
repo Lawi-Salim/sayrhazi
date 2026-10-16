@@ -31,6 +31,35 @@ Sayrhazi .
 tunda sayrhazi
 ```
 
+Le dashboard a aussi son raccourci, pour éviter d'avoir à se souvenir de
+`python .opencode/watch-tui.py` :
+
+```powershell
+sayrhazi-tui                          # projet courant
+sayrhazi-tui C:\chemin\vers\MonProjet # n'importe où dans le terminal
+sayrhazi-tui . --once                 # une seule capture, puis sortie
+```
+
+Deux façons de l'obtenir, parce qu'elles n'ont pas la même durée de vie :
+
+| Source | Durée de vie | Marche quand |
+|---|---|---|
+| `npm i -g sayrhazi` | durable | immédiatement, le binaire est sur le PATH |
+| profil (`Sayrhazi-Profile.ps1`) | la session du terminal | après rechargement du profil ou ouverture d'un nouveau terminal |
+
+Une fonction de profil n'existe que dans la session qui l'a définie : après une
+mise à jour du noyau qui ajoute une commande, cette commande reste introuvable
+jusqu'au rechargement. Préférez le binaire npm, qui n'a pas cette limite.
+
+Dans les deux cas : le premier argument est le point de départ et la racine est
+cherchée en remontant jusqu'à `.opencode/watch-tui.py`, donc rester dans
+`.opencode` ou un sous-dossier marche aussi. Le dashboard résout sa racine
+depuis le répertoire courant : la commande change de dossier pour la durée du
+lancement puis revient, sans quoi `sayrhazi-tui <projet>` analyserait le projet
+du terminal. Les flags après le chemin (`--once`, `--interval`, `--lines`) sont
+transmis au dashboard. Sur un projet absent ou sans `.opencode/watch-tui.py`,
+elle s'arrête sur un message explicite.
+
 ## Depuis le dépôt Sayrhazi
 
 ```powershell

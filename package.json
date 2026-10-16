@@ -1,9 +1,10 @@
 {
   "name": "sayrhazi",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Workflow multi-agents portable (moteur Python ; dashboard TUI en option via textual)",
   "bin": {
-    "sayrhazi": "bin/sayrhazi.js"
+    "sayrhazi": "bin/sayrhazi.js",
+    "sayrhazi-tui": "bin/sayrhazi-tui.js"
   },
   "scripts": {
     "postinstall": "node ./bin/check-env.js",

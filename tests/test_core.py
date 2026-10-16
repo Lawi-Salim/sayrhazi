@@ -955,16 +955,59 @@ class TestSession(unittest.TestCase):
         class _R:
             agent_file, role = "hadji", "reviewer"
             usage, context_tokens, usage_pct = 0.04, 45215, "4 %"
-            calls, manual_calls, cost, sid = 1, 4, "$0.00", "ebe4cb9c9f"
+            calls, manual_calls = 2, 7
+            cost_session, cost_projet = "$0.01", "$0.42"
+            sid = "ebe4cb9c9f"
             origine, report_txt, etat = "auto", "VALIDÉ", "VALIDÉ"
 
         cellules = t.row_cells(_R())
         self.assertEqual(len(cellules), len(t.COLUMNS),
                          f"{len(cellules)} cellules pour {len(t.COLUMNS)} colonnes")
         # La jauge seule dans sa colonne, les tokens seuls dans la leur.
-        self.assertEqual(len(cellules[2]), 10)
-        self.assertTrue(set(cellules[2]) <= {"█", "░", "·"})
-        self.assertEqual(cellules[3], "45 215")
+        jauge = t.COLUMNS.index("Jauge")
+        self.assertEqual(len(cellules[jauge]), 10)
+        self.assertTrue(set(cellules[jauge]) <= {"█", "░", "·"})
+        self.assertEqual(cellules[t.COLUMNS.index("Tokens")], "45 215")
+
+    def test_dashboard_separe_session_et_projet(self):
+        # Les deux blocs ne doivent jamais laisser croire qu'ils mesurent la
+        # meme chose : `Coût sess.` est celui de la session affichee,
+        # `Coût proj.` cumule toutes les sessions de l'agent sur le projet.
+        t = self._tui()
+
+        class _R:
+            agent_file, role = "hifadhui", "security"
+            usage, context_tokens, usage_pct = 0.05, 55467, "5 %"
+            calls, manual_calls = 1, 5
+            cost_session, cost_projet = "$0.03", "$0.99"
+            sid = "ebddd8569f"
+            origine, report_txt, etat = "auto", "VALIDÉ", "VALIDÉ AVEC RÉSERVES"
+
+        cellules = t.row_cells(_R())
+        sess = cellules[t.COLUMNS.index("Coût sess.")]
+        proj = cellules[t.COLUMNS.index("Coût proj.")]
+        self.assertEqual(sess, "$0.03", "le cout de session affiche l'historique")
+        self.assertEqual(proj, "$0.99")
+        self.assertNotEqual(sess, proj)
+        # Les deux blocs sont separes par une colonne qui ne porte aucune valeur.
+        seps = [i for i, nom in enumerate(t.COLUMNS) if nom == t.SEP]
+        self.assertTrue(seps, "aucune separation de blocs")
+        for i in seps:
+            self.assertEqual(cellules[i], f"[dim]{t.SEP}[/]",
+                             "la colonne de separation porte une valeur")
+
+    def test_dashboard_sortie_texte_sans_balise(self):
+        # La sortie `--once` est du texte brut : le balisage Textual qui y
+        # fuirait rendrait la table illisible et fausserait l'alignement des
+        # colonnes (les balises comptent dans la largeur).
+        t = self._tui()
+        for brut, attendu in (("[dim]n/d[/]", "n/d"),
+                              ("[/]", ""),
+                              ("[dim]│[/]", "│"),
+                              ("[yellow]manuel[/]", "manuel"),
+                              ("watcher", "watcher")):
+            with self.subTest(balise=brut):
+                self.assertEqual(t.plain(brut), attendu)
 
 
 # --- Tests de robustesse 0.13.0 (sessions jetables, rapport = mémoire) ---

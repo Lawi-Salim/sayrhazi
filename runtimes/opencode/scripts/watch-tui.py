@@ -401,9 +401,10 @@ class AgentRow:
         self.usage = None      # % contexte du dernier message, None si inconnu
         self.usage_pct = "-"
         self.context_tokens = None
-        self.calls = 0         # appels automatiques (watcher)
-        self.manual_calls = 0  # sessions manuelles
-        self.cost = None
+        self.calls = 0         # sessions automatiques du projet (historique)
+        self.manual_calls = 0  # sessions manuelles du projet (historique)
+        self.cost_session = None   # coût de la SEULE session affichée
+        self.cost_projet = None    # coût cumulé de toutes les sessions du projet
         self.sid = "-"
         self.limite_connue = False
         self.origine = None    # "auto" | "manuel"
@@ -431,12 +432,18 @@ class AgentRow:
                        key=lambda s: s.get("time_updated") or s["time_created"])
         self.origine = "auto" if courante.get("auto") else "manuel"
         self.sid = short_session(courante["id"])
+
+        # Deux coûts, jamais confondus : celui de la session affichée et celui
+        # de tout l'historique du projet. Additionner des sessions n'a pas de
+        # sens pour un contexte, mais a un sens pour une facture.
+        self.cost_session = format_cost(courante.get("cost"))
         try:
-            self.cost = sum(float(s.get("cost") or 0.0) for s in sessions)
+            cumul = sum(float(s.get("cost") or 0.0) for s in sessions)
         except (TypeError, ValueError):
-            self.cost = 0.0
+            cumul = 0.0
+        self.cost_projet = format_cost(cumul)
+
         payload = last_assistant_message(db_path, courante["id"])
-        self.cost = format_cost(self.cost)
         if not payload:
             return
         self.context_tokens = message_context_tokens(payload)
@@ -447,11 +454,44 @@ class AgentRow:
             self.usage_pct = f"{self.usage * 100:.0f} %"
 
 
-COLUMNS = ("Agent", "Rôle", "Jauge", "Tokens", "%", "Auto", "Manuel",
-           "Coût", "Session", "Origine", "Rapport", "État")
-# Le libellé ne promet pas une capacité restante : c'est l'occupation au
-# dernier message, telle que le panneau Context d'OpenCode la calcule.
-COLUMN_PCT_HINT = "% ctx (dernier msg)"
+SEP = "│"   # séparateur de blocs : jamais une valeur
+
+# Deux blocs explicitement séparés, parce qu'ils ne mesurent pas la même chose.
+#
+#   bloc « session » : Session, Origine, Jauge, Tokens, %, Coût sess.
+#       Décrivent UNIQUEMENT la session affichée (celle dont l'ID est donné).
+#       Quand la vague suivante ouvre une session neuve, ces valeurs changent
+#       avec elle. Elles ne sont jamais sommées d'une session à l'autre :
+#       additionner des fenêtres de contextes différents n'a pas de sens.
+#
+#   bloc « projet » : Auto, Manuel, Coût proj.
+#       Agrègent TOUTES les sessions de cet agent sur ce projet, toutes
+#       tâches confondues. Un `Auto = 2` signifie « deux appels du watcher
+#       depuis le début du projet », pas « deux appels dans la session
+#       affichée ». Pour une facture, l'addition a un sens ; pour un
+#       contexte, jamais.
+COLUMNS = ("Agent", "Rôle",
+           "Session", "Origine", "Jauge", "Tokens", "%", "Coût sess.",
+           SEP,
+           "Auto", "Manuel", "Coût proj.",
+           SEP,
+           "Rapport", "État")
+
+GROUP_SESSION = ("Session", "Origine", "Jauge", "Tokens", "%", "Coût sess.")
+GROUP_PROJET = ("Auto", "Manuel", "Coût proj.")
+
+LEGENDE = (
+    "Session  = la session affichée uniquement (change à chaque vague). "
+    "Proj.  = toutes les sessions de l'agent sur le projet, tâches confondues.",
+)
+
+
+MARKUP_RE = re.compile(r"\[/?[a-z ]*\]")
+
+
+def plain(cell: str) -> str:
+    """Retire le balisage Textual (la sortie `--once` est du texte brut)."""
+    return MARKUP_RE.sub("", str(cell or ""))
 
 
 def row_cells(row) -> list:
@@ -459,17 +499,23 @@ def row_cells(row) -> list:
 
     Une valeur par colonne : la jauge et le nombre de tokens sont deux
     cellules distinctes, jamais collés dans une seule (sinon l'en-tête et la
-    ligne se décalent d'une case).
+    ligne se décalent d'une case). Les séparateurs de blocs occupent leur
+    place mais ne portent aucune valeur.
     """
     pct = row.usage_pct if row.usage is not None else "[dim]n/d[/]"
     tokens = (format_tokens(row.context_tokens)
               if row.context_tokens is not None else "[dim]n/d[/]")
     origine = {"auto": "watcher", "manuel": "[yellow]manuel[/]"}.get(row.origine, "-")
-    return [row.agent_file, row.role, bar(row.usage, 10), tokens, pct,
-            str(row.calls) if row.calls else "[dim]0[/]",
-            str(row.manual_calls) if row.manual_calls else "[dim]0[/]",
-            row.cost if row.cost is not None else "[dim]n/d[/]",
-            row.sid, origine, row.report_txt, row.etat]
+    session = ([row.agent_file, row.role,
+                row.sid, origine, bar(row.usage, 10), tokens, pct,
+                row.cost_session if row.cost_session is not None else "[dim]n/d[/]",
+                f"[dim]{SEP}[/]",
+                str(row.calls) if row.calls else "[dim]0[/]",
+                str(row.manual_calls) if row.manual_calls else "[dim]0[/]",
+                row.cost_projet if row.cost_projet is not None else "[dim]n/d[/]",
+                f"[dim]{SEP}[/]",
+                row.report_txt, row.etat])
+    return session
 
 
 class SayrhaziTUI(App):
@@ -520,7 +566,12 @@ class SayrhaziTUI(App):
             watcher_part = f"watcher PID [yellow]{pid}[/] · verrou {format_age(time.time() - age)}"
 
         header = self.query_one("#header", Static)
-        header.update(f"Sayrhazi — [bold]{task_id}[/] [bold]{status}[/]  {watcher_part}  ·  racine {self.project_root}")
+        header.update(
+            f"Sayrhazi — [bold]{task_id}[/] [bold]{status}[/]  {watcher_part}"
+            f"  ·  racine {self.project_root}\n"
+            f"[dim]Bloc session : {', '.join(GROUP_SESSION)} — la session affichée"
+            f" uniquement.[/]  [dim]Bloc projet : {', '.join(GROUP_PROJET)}"
+            f" — toutes les sessions de l'agent sur le projet.[/]")
 
         table = self.query_one("#table", DataTable)
         table.clear(columns=True)
@@ -567,27 +618,39 @@ def main() -> int:
             watcher = f"watcher PID {pid} · verrou {format_age(time.time() - age)}"
         print(f"Sayrhazi — {task_id} [{status}]  {watcher}  ·  racine {root}")
         print()
-        head = (f"{'Agent':<11} {'Rôle':<10} {'Jauge':<10} {'Tokens':>8} {'%':>5} {'Auto':>5} "
-                f"{'Manuel':>6} {'Coût':>7} {'Session':<10} {'Origine':<8} {'État'}")
+        print(f"Bloc session : {', '.join(GROUP_SESSION)}")
+        print(f"  → la session affichée uniquement ; change à chaque vague, jamais sommée.")
+        print(f"Bloc projet : {', '.join(GROUP_PROJET)}")
+        print(f"  → toutes les sessions de cet agent sur le projet, tâches confondues.")
+        print()
+        head = (f"{'Agent':<11} {'Rôle':<10} {'Session':<12} {'Origine':<8} {'Jauge':<10} "
+                f"{'Tokens':>8} {'%':>5} {'C.sess':>7} {SEP} {'Auto':>4} {'Man':>4} "
+                f"{'C.proj':>7} {SEP} {'État'}")
         print(head)
         print("─" * len(head))
+
+        def _c(cells, nom):
+            return cells[COLUMNS.index(nom)]
+
         for role in ROLE_ORDER:
             row = AgentRow(role, state, resume, task_id if task_id != "-" else "", root, limits)
-            pct = row.usage_pct if row.usage is not None else "n/d"
-            ctx = format_tokens(row.context_tokens) if row.context_tokens is not None else "n/d"
-            cost = row.cost if row.cost is not None else "n/d"
-            origine = {"auto": "watcher", "manuel": "manuel"}.get(row.origine, "-")
-            print(f"{row.agent_file:<11} {role:<10} {bar(row.usage, 10):<10} {ctx:>8} {pct:>5} "
-                  f"{row.calls:>5} {row.manual_calls:>6} {cost:>7} {row.sid:<10} {origine:<8} {row.etat}")
+            cells = [plain(c) for c in row_cells(row)]
+            identite = f"{_c(cells, 'Agent'):<11} {_c(cells, 'Rôle'):<10}"
+            sess = (f"{_c(cells, 'Session'):<12} {_c(cells, 'Origine'):<8} "
+                    f"{_c(cells, 'Jauge'):<10} {_c(cells, 'Tokens'):>8} "
+                    f"{_c(cells, '%'):>5} {_c(cells, 'Coût sess.'):>7} {SEP} ")
+            proj = (f"{_c(cells, 'Auto'):>4} {_c(cells, 'Manuel'):>4} "
+                    f"{_c(cells, 'Coût proj.'):>7} {SEP} ")
+            print(f"{identite}{sess}{proj}{_c(cells, 'État')}")
         print("─" * len(head))
-        print("Jauge + Tokens = dernier message assistant de la session affichee")
+        print("Jauge + Tokens = dernier message assistant de la session affichée")
         print("(formule du panneau Context d'OpenCode : input + output + reasoning")
-        print("+ cache.read + cache.write).")
-        print("Ce n'est pas une mesure de capacite restante : le budget effectif peut")
-        print("dependre du fournisseur, de la compaction et des limites du runtime.")
-        print("Auto   = sessions lancees par le watcher (prefixe Sayrhazi).")
-        print("Manuel = sessions ouvertes a la main depuis un terminal.")
-        print("n/d    = fenetre de contexte inconnue (modele absent du registre).")
+        print("+ cache.read + cache.write), divisé par la fenêtre du modèle.")
+        print("Ce n'est pas une mesure de capacité restante : le budget effectif peut")
+        print("dépendre du fournisseur, de la compaction et des limites du runtime.")
+        print(f"Session  = la session affichée. Origine = {'watcher (préfixe Sayrhazi) ou manuel.'}")
+        print(f"Bloc projet : Auto / Man = nombre de sessions du projet ; C.proj = coût cumulé.")
+        print("n/d      = donnée absente (aucun appel, ou modèle absent du registre).")
         print("Aucun pourcentage cumulatif : additionner des sessions n'a pas de sens.")
         print("logs récents (history/workflow-log.md) :")
         log_lines = tail_lines(root / ".opencode" / "history" / "workflow-log.md", max(1, args.lines))
