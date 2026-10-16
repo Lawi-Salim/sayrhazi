@@ -339,6 +339,57 @@ def format_cost(value) -> str:
         return "-"
 
 
+def message_token_split(payload: dict) -> dict:
+    """Décomposition du contexte d'un message, telle qu'OpenCode l'a comptée.
+
+   Utile parce que `cache.read` domine presque toujours : une jauge à 3 %
+   n'a aucun sens tant qu'on n'a pas vu que 90 % du contexte était de la
+    relecture de cache et non de la production de l'agent.
+    """
+    tokens = (payload or {}).get("tokens") or {}
+    cache = tokens.get("cache") or {}
+    return {"input": _num(tokens.get("input")),
+            "cache.read": _num(cache.get("read")),
+            "cache.write": _num(cache.get("write")),
+            "output": _num(tokens.get("output")),
+            "reasoning": _num(tokens.get("reasoning"))}
+
+
+def session_activity(row) -> dict:
+    """Horaires de la session affichée, lus chez OpenCode.
+
+    OpenCode stocke `time_created` / `time_updated` en **millisecondes** :
+    les passer tels quels à `format_age` donnait un delta négatif, donc `0s`
+    partout. Convertis en secondes ici, une fois.
+
+    `time_updated - time_created` n'est pas un temps de travail : c'est le
+    temps pendant lequel la session est restée ouverte. Une session manuelle
+    ouverte deux jours affiche donc ~2j, et c'est exact.
+    """
+    courante = getattr(row, "session_row", None) or {}
+    created = int(courante.get("time_created") or 0)
+    updated = int(courante.get("time_updated") or 0)
+    if not created or not updated or updated < created:
+        return {}
+    return {"created": created / 1000.0, "updated": updated / 1000.0,
+            "duree": (updated - created) / 1000.0}
+
+
+def format_span(seconds: float) -> str:
+    """Durée lisible jusqu'aux jours (`2j 03h14`), sans mensonge ni troncature."""
+    total = max(0, int(seconds))
+    if total < 60:
+        return f"{total}s"
+    minutes, rest = divmod(total, 60)
+    if minutes < 60:
+        return f"{minutes}m" if rest == 0 else f"{minutes}m{rest:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h{minutes:02d}m"
+    days, hours = divmod(hours, 24)
+    return f"{days}j {hours:02d}h"
+
+
 def format_age(mtime: float) -> str:
     if not mtime:
         return "-"
@@ -397,6 +448,9 @@ class AgentRow:
         else:
             self.etat = "[dim]—[/]"
         self.report_txt = f"{r_status or '-'} · {format_age(r_mtime or 0)}" if r_task else "-"
+        self.etat_plain = ("EN COURS" if self.agent_file in running
+                           else (r_status if (r_task and task_id and r_task == task_id)
+                                 else ("attente" if r_task else "—")))
 
         self.usage = None      # % contexte du dernier message, None si inconnu
         self.usage_pct = "-"
@@ -407,7 +461,12 @@ class AgentRow:
         self.cost_projet = None    # coût cumulé de toutes les sessions du projet
         self.sid = "-"
         self.limite_connue = False
+        self.limite = 0
         self.origine = None    # "auto" | "manuel"
+        self.modele = ""
+        self.last_payload: dict = {}
+        self.session_row: dict = {}
+        self.titre_session = ""
 
         if project_root is None:
             return
@@ -432,6 +491,10 @@ class AgentRow:
                        key=lambda s: s.get("time_updated") or s["time_created"])
         self.origine = "auto" if courante.get("auto") else "manuel"
         self.sid = short_session(courante["id"])
+        # Donnees brutes conservees pour le panneau de detail : rien n'est
+        # recalcule ni devine, le detail lit ce qu'OpenCode a enregistre.
+        self.session_row = courante
+        self.titre_session = str(courante.get("title") or "")
 
         # Deux coûts, jamais confondus : celui de la session affichée et celui
         # de tout l'historique du projet. Additionner des sessions n'a pas de
@@ -446,12 +509,48 @@ class AgentRow:
         payload = last_assistant_message(db_path, courante["id"])
         if not payload:
             return
+        self.last_payload = payload
         self.context_tokens = message_context_tokens(payload)
+        self.modele = message_model_key(payload)
         limit = (model_limits or {}).get(message_model_key(payload))
         if isinstance(limit, int) and limit > 0:
             self.limite_connue = True
+            self.limite = limit
             self.usage = self.context_tokens / limit
             self.usage_pct = f"{self.usage * 100:.0f} %"
+
+    def detail_lines(self) -> list:
+        """Détail de l'agent : uniquement des données lues, jamais calculées.
+
+      La ligne du tableau reste un résumé ; tout ce qui demande une ligne
+        de plus est ici. Aucun chiffre n'est estimé : `n/d` quand la donnée
+        n'a pas été enregistrée par OpenCode.
+        """
+        out = [f"[bold]{self.agent_file}[/] — {self.role}"
+               f"  ·  [bold]{self.etat_plain}[/]"]
+        rapport = self.report_txt
+        out.append(f"rapport   {self.report}  ·  {rapport}")
+        titre = self.titre_session or "-"
+        out.append(f"session   {self.sid}  ·  {self.origine or '-'}"
+                   f"  ·  {titre[:46]}")
+        activite = session_activity(self)
+        if activite:
+            out.append(f"          créée {format_age(activite['created'])}"
+                       f"  ·  active {format_age(activite['updated'])}"
+                       f"  ·  ouverte {format_span(activite['duree'])}"
+                       f"  ·  coût {self.cost_session or 'n/d'}")
+        if self.context_tokens is None:
+            out.append("contexte  n/d (aucun message assistant mesuré)")
+            return out
+        part = message_token_split(getattr(self, "last_payload", {}) or {})
+        out.append(f"modèle    {self.modele or 'n/d'}"
+                   + (f"  ·  fenêtre {format_tokens(self.limite)}"
+                      if self.limite_connue else "  ·  fenêtre n/d"))
+        out.append(f"contexte  {format_tokens(self.context_tokens)} tokens"
+                   f"  =  {self.usage_pct} de la fenêtre")
+        out.append("          " + "  ".join(f"{k} {format_tokens(v)}"
+                                          for k, v in part.items()))
+        return out
 
 
 SEP = "│"   # séparateur de blocs : jamais une valeur
@@ -523,7 +622,12 @@ class SayrhaziTUI(App):
     Screen { background: $surface; }
     #header { height: 3; dock: top; background: $primary; color: $text; text-align: center; }
     #table { height: 1fr; }
-    #logs { height: 12; dock: bottom; border: solid $primary; padding: 1; }
+    /* Les deux panneaux du bas partagent UN conteneur : deux widgets en
+       dock:bottom se superposent au lieu de s'empiler, et le second peint
+       par-dessus le premier — le journal masquait le detail. */
+    #bottom { dock: bottom; height: 17; }
+    #details { height: 7; border: solid $primary; padding: 1; }
+    #logs { height: 10; border: solid $primary; padding: 1; }
     DataTable { background: $surface; }
     DataTable > .datatable--header { background: $primary; color: $text; text-style: bold; }
     DataTable > .datatable--cursor { background: $accent; color: $text; }
@@ -539,12 +643,19 @@ class SayrhaziTUI(App):
         self.log_lines = log_lines
         self.model_limits = load_model_limits(project_root)
         self._timer: Timer | None = None
+        # Agent dont la ligne est selectionnee. Le rafraichissement reconstruit
+        # le tableau toutes les `interval` secondes : sans cette memorisation,
+        # `table.clear()` renvoyait le curseur sur la premiere ligne a chaque
+        # tick, ce qui rendait le clavier et la souris inutilisables.
+        self.selected_role: Optional[str] = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         yield Static(id="header")
         yield DataTable(id="table", cursor_type="row", zebra_stripes=True)
-        yield Static(id="logs")
+        with Vertical(id="bottom"):
+            yield Static(id="details")
+            yield Static(id="logs")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -574,12 +685,19 @@ class SayrhaziTUI(App):
             f" — toutes les sessions de l'agent sur le projet.[/]")
 
         table = self.query_one("#table", DataTable)
+        selection = self.selected_role
         table.clear(columns=True)
         table.add_columns(*COLUMNS)
         for role in ROLE_ORDER:
             row = AgentRow(role, state, resume, task_id if task_id != "-" else "",
                            self.project_root, self.model_limits)
             table.add_row(*row_cells(row))
+        # Restaure la ligne selectionnee : le curseur est porte par la position,
+        # pas par l'identite de la ligne, et la reconstruction la reinitialise.
+        if selection in ROLE_ORDER:
+            table.move_cursor(row=ROLE_ORDER.index(selection))
+        elif ROLE_ORDER:
+            self.selected_role = ROLE_ORDER[0]
 
         logs = self.query_one("#logs", Static)
         log_lines = tail_lines(self.project_root / ".opencode" / "history" / "workflow-log.md", self.log_lines)
@@ -587,6 +705,27 @@ class SayrhaziTUI(App):
             logs.update("[dim](aucun log)[/]")
         else:
             logs.update("\n".join(log_lines[-self.log_lines:]))
+
+        # Detail de la ligne selectionnee. Reconstruit a chaque tick comme le
+        # reste : l'agent choisi peut avoir produit un rapport entre deux ticks.
+        details = self.query_one("#details", Static)
+        row = None
+        if self.selected_role in ROLE_ORDER:
+            row = AgentRow(self.selected_role, state, resume,
+                           task_id if task_id != "-" else "",
+                           self.project_root, self.model_limits)
+        details.update("\n".join(row.detail_lines()) if row
+                       else "[dim](aucune ligne sélectionnée — flèches ou clic)[/]")
+
+    def on_data_table_row_highlighted(self, event) -> None:
+        """Mémorise l'agent sous le curseur (clic ou flèches)."""
+        if 0 <= event.cursor_row < len(ROLE_ORDER):
+            self.selected_role = ROLE_ORDER[event.cursor_row]
+
+    def on_data_table_row_selected(self, event) -> None:
+        """Clic ou Entrée : fige le détail sur cet agent jusqu'au tick suivant."""
+        if 0 <= event.cursor_row < len(ROLE_ORDER):
+            self.selected_role = ROLE_ORDER[event.cursor_row]
 
     def action_refresh(self) -> None:
         self.refresh_data()

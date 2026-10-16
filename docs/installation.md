@@ -36,9 +36,17 @@ Le dashboard a aussi son raccourci, pour éviter d'avoir à se souvenir de
 
 ```powershell
 sayrhazi-tui                          # projet courant
-sayrhazi-tui C:\chemin\vers\MonProjet # n'importe où dans le terminal
+sayrhazi-tui C:\mon\projet            # n'importe où dans le terminal
 sayrhazi-tui . --once                 # une seule capture, puis sortie
 ```
+
+Sur Linux et macOS, le même binaire utilise `python3`. Un tableau de détail
+s'affiche sous le tableau et suit la ligne sélectionnée (flèches ou clic) : il
+précise le modèle, la fenêtre de contexte, le coût de session et la décomposition
+du contexte (`input`, `cache.read`, `cache.write`, `output`, `reasoning`). Cette
+dernière est la plus parlante — `cache.read` représente d'ordinaire l'essentiel
+du contexte renvoyé, donc une jauge à 55 % de fenêtre ne signifie pas que
+l'agent a produit 55 % de tokens.
 
 Deux façons de l'obtenir, parce qu'elles n'ont pas la même durée de vie :
 
@@ -69,12 +77,34 @@ cd <clone>
 
 ## Linux et macOS
 
+Le lanceur npm utilise `python3` hors Windows. Deux différences avec Windows méritent d'être connues, toutes deux rencontrées à l'usage :
+
+**`yarn add` n'installe pas la commande sur le PATH.** `yarn add` place le binaire dans `./node_modules/.bin`, qui n'est pas dans le PATH : `sayrhazi` reste « commande introuvable ». Seul `npm install -g sayrhazi` installe réellement la commande. De même, `yarn remove -r sayrhazi` est une erreur — `-r` signifie *recursive* et attend des workspaces ; la commande est `yarn remove sayrhazi`.
+
+**Le dashboard exige `textual`, absent d'une installation fraîche.** Sans lui, `sayrhazi-tui` s'arrête sur une erreur d'import. `tunda sayrhazi` le signale désormais avant que cela n'arrive. Installation recommandée, dans un venv dédié pour ne pas toucher au Python système :
+
+```bash
+python3 -m venv ~/.venvs/sayrhazi
+~/.venvs/sayrhazi/bin/pip install textual
+```
+
+Si `pip3 install textual` direct est refusé par votre distribution (Ubuntu 23.10+ applique PEP 668), utilisez le venv ci-dessus plutôt que `--break-system-packages`.
+
 Rendre le script exécutable puis l'appeler avec la racine du projet :
 
 ```bash
 chmod +x runtimes/opencode/scripts/install-sayrhazi.sh
 ./runtimes/opencode/scripts/install-sayrhazi.sh /chemin/vers/MonProjet
 ```
+
+Sous bash, les fonctions de profil (`Sayrhazi`, `tunda`, `update`, `info`, `remove`, `sayrhazi-tui`) se sourcent depuis `~/.bashrc` :
+
+```bash
+export SAYRHAZI_HOME="$(npm root -g)/sayrhazi"
+. "$SAYRHAZI_HOME/runtimes/opencode/scripts/Sayrhazi-Profile.sh"
+```
+
+**Attention aux collisions de noms.** Sur Ubuntu, `info` et `update` sont des commandes système (coreutils et `update-manager`) : tant que le profil n'est pas sourcé, `info sayrhazi` appelle le `info` de coreutils et répond « aucune entrée de menu ». Ce n'est pas une panne de Sayrhazi. Le binaire global `sayrhazi` et `sayrhazi-tui` n'ont pas ce conflit et sont préférables.
 
 ## Ce que fait l'installation
 

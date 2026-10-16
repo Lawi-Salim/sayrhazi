@@ -126,7 +126,23 @@ La compaction d'OpenCode n'a pas de cas particulier : elle est marquée par un p
 
 Aucun pourcentage cumulatif n'est affiché : additionner des fenêtres de sessions différentes n'a pas de sens.
 
-OpenCode ne stocke nulle part la fenêtre de contexte d'un modèle (ni en base, ni dans sa configuration). Sayrhazi la lit dans `core/runtime/models.yaml`, installé dans `.opencode/models.yaml` et surchargeable par projet. Modèle absent du registre → `n/d` : mieux vaut une métrique absente qu'un pourcentage silencieusement faux ; tokens et coût restent affichés.
+OpenCode ne stocke nulle part la fenêtre de contexte d'un modèle (ni en base, ni dans sa configuration). Sayrhazi la lit dans `core/runtime/models.yaml`, installé dans `.opencode/models.yaml` et surchargeable par projet. Modèle absent du registre → `n/d` : mieux vaut une métrique absente qu'un pourcentage silencieusement faux ; tokens et coût restent affichés. `tunda sayrhazi` contrôle la présence du registre, de `watch-tui.py` et de la dépendance `textual`, et nomme la commande d'installation adaptée à la plateforme (`pip` / `pip3`).
+
+### Panneau de détail
+
+Sous le tableau, un panneau suit la ligne sélectionnée (flèches du clavier ou clic, aucune touche supplémentaire). Il reprend ce que la ligne ne peut pas contenir faute de place : modèle et fenêtre, coût de session, horodatages, et surtout la **décomposition du contexte** telle qu'OpenCode l'a comptée :
+
+```text
+modèle    opencode/muse-spark-1.3-contributor-free  ·  fenêtre 1 048 576
+contexte  572 128 tokens =  55 % de la fenêtre
+          input 715  cache.read 570 993  cache.write 0  output 420  reasoning 0
+```
+
+La décomposition n'est pas décorative : `cache.read` domine presque toujours. Sur les sessions réelles de Sayrhazi-web, il représente 99 % du contexte de Bamse (570 993 sur 572 128) et 98 % de celui de Hadji (51 441 sur 52 282). Sans cette ligne, « 55 % de fenêtre » laisse croire que l'agent a produit 572 K tokens ; il n'a quasi rien produit et relu le projet — deux coûts très différents.
+
+Un agent sans mesure affiche `n/d` partout : aucun pourcentage, aucune durée, aucun coût ne sont inventés.
+
+La sélection survit au rafraîchissement. Le tableau est reconstruit à chaque tick, ce qui réinitialisait le curseur sur la première ligne : cliquer sur hadji perdait la surbrillance en une seconde. L'agent sous le curseur est mémorisé **par son rôle** et restauré après reconstruction, pas par index, pour survivre à tout réordonnancement des lignes.
 
 En cas de timeout, le watcher vérifie si le rapport a quand même été produit (le processus peut rester bloqué après l'écriture, ex. serveur de prévisualisation laissé actif) : rapport présent → succès acté, sans retry. Les retries réseau/timeout sont à un seul coup (pas de réveil permanent) et la ligne `État :` ne s'affiche qu'en cas de changement — fini le spam toutes les 3 secondes.
 

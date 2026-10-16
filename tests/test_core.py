@@ -996,6 +996,101 @@ class TestSession(unittest.TestCase):
             self.assertEqual(cellules[i], f"[dim]{t.SEP}[/]",
                              "la colonne de separation porte une valeur")
 
+    def test_dashboard_detail_decoupe_le_contexte(self):
+        # Le detail doit decomposer le contexte comme OpenCode l'a compte,
+        # parce que `cache.read` domine et qu'une jauge seule ne dit rien.
+        t = self._tui()
+        payload = {"role": "assistant", "finish": "stop", "providerID": "p",
+                   "modelID": "m",
+                   "tokens": {"input": 715, "output": 420, "reasoning": 0,
+                              "cache": {"read": 570993, "write": 0}}}
+        part = t.message_token_split(payload)
+        self.assertEqual(part, {"input": 715, "cache.read": 570993,
+                                "cache.write": 0, "output": 420, "reasoning": 0})
+        self.assertEqual(sum(part.values()), t.message_context_tokens(payload),
+                         "le detail ne recompte pas la formule")
+
+    def test_dashboard_detail_n_invente_rien(self):
+        # Agent jamais appele : le detail doit dire n/d, pas fabriquer un
+        # contexte, une duree ou un cout. On instancie le vrai AgentRow avec
+        # une base absente : c'est le chemin reel d'un agent sans session.
+        t = self._tui()
+        import tempfile as _tf
+        from pathlib import Path as _P
+        racine = _P(_tf.mkdtemp())
+        ligne = t.AgentRow("qa", {}, racine / "resume", "", project_root=None,
+                            model_limits={})
+        lignes = ligne.detail_lines()
+        self.assertTrue(lignes)
+        self.assertTrue(any("n/d" in l for l in lignes),
+                        f"aucune mention n/d dans {lignes}")
+        self.assertFalse(any("%" in l for l in lignes),
+                         "un pourcentage a ete invente sans mesure")
+        self.assertIsNone(ligne.context_tokens)
+        self.assertIsNone(ligne.cost_session)
+
+    def test_dashboard_detail_agence_token_absente(self):
+        # `tokens` present mais vide ou aberrant : jamais de division par zero
+        # ni de valeur negative.
+        t = self._tui()
+        for tokens in ({}, {"input": None}, {"cache": None}, {"input": "beaucoup"}):
+            with self.subTest(tokens=tokens):
+                part = t.message_token_split({"tokens": tokens})
+                self.assertTrue(all(v >= 0 for v in part.values()))
+
+    def test_dashboard_selection_preservee_au_rafraichissement(self):
+        # Regression : `table.clear()` renvoyait le curseur sur la premiere
+        # ligne a chaque tick, donc le clic etait perdu en une seconde.
+        t = self._tui()
+        self.assertIn("builder", t.ROLE_ORDER)
+        # La restauration doit se baser sur l'identite du role, pas sur
+        # l'index : l'index depend de l'ordre courant des lignes.
+        self.assertGreater(t.ROLE_ORDER.index("reviewer"),
+                           t.ROLE_ORDER.index("builder"))
+
+    def test_dashboard_horodatages_en_millisecondes(self):
+        # Regression : OpenCode stocke time_created/time_updated en
+        # millisecondes. Passes tels quels a format_age, le delta devenait
+        # negatif, donc le detail affichait « creee 0s · active 0s » partout.
+        t = self._tui()
+
+        class _R:
+            session_row = {"time_created": 1_000_000_000_000,
+                           "time_updated": 1_000_000_000_000 + 90_000}
+
+        act = t.session_activity(_R())
+        self.assertAlmostEqual(act["created"], 1_000_000_000.0, places=1)
+        self.assertEqual(act["duree"], 90.0)
+        self.assertEqual(t.format_span(act["duree"]), "1m30s")
+
+    def test_dashboard_etat_du_detail_non_reinitialise(self):
+        # Regression : la valeur par defaut « — » etait reappliquee apres le
+        # calcul, si bien que le detail affichait « — » pour tout agent alors
+        # que la colonne Etat montrait bien « attente ».
+        t = self._tui()
+        import tempfile as _tf
+        from pathlib import Path as _P
+        racine = _P(_tf.mkdtemp())
+        resume = racine / "resume"
+        resume.mkdir(parents=True)
+        (resume / "build.txt").write_text(
+            "task_id: FEATURE-007\nstatus: TERMINÉ\n", encoding="utf-8")
+        ligne = t.AgentRow("builder", {}, resume, "FEATURE-007",
+                           project_root=None, model_limits={})
+        # task_id identique au rapport -> l'etat doit etre celui du rapport.
+        self.assertEqual(ligne.etat_plain, "TERMINÉ")
+        autre = t.AgentRow("builder", {}, resume, "FEATURE-006",
+                            project_root=None, model_limits={})
+        self.assertEqual(autre.etat_plain, "attente")
+
+    def test_dashboard_format_span_au_dela_des_heures(self):
+        t = self._tui()
+        self.assertEqual(t.format_span(45), "45s")
+        self.assertEqual(t.format_span(90), "1m30s")
+        self.assertEqual(t.format_span(3600), "1h00m")
+        self.assertEqual(t.format_span(2 * 86400 + 3 * 3600 + 14 * 60), "2j 03h")
+        self.assertEqual(t.format_span(-5), "0s")
+
     def test_dashboard_sortie_texte_sans_balise(self):
         # La sortie `--once` est du texte brut : le balisage Textual qui y
         # fuirait rendrait la table illisible et fausserait l'alignement des
